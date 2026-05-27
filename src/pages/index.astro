@@ -59,9 +59,10 @@ const totalDays = trips.reduce((sum, t) => sum + t.data.days, 0);
           <h1 class="text-white text-4xl sm:text-5xl font-bold leading-tight mb-3" style="font-family: 'Lora', serif;">
             Six Years in the<br />High Country
           </h1>
-          <p class="text-stone-300 text-base sm:text-lg max-w-xl mb-6">
+          <p class="text-stone-300 text-base sm:text-lg max-w-xl mb-2">
             Walking the Sierra from Kennedy Meadows to Echo Lake — one long weekend at a time, without pausing a career.
           </p>
+          <p class="text-stone-500 text-sm mb-6">Click any route on the map to read the journal entry.</p>
           <!-- Stats bar -->
           <div class="flex flex-wrap gap-6 pointer-events-auto">
             <div>
@@ -88,11 +89,11 @@ const totalDays = trips.reduce((sum, t) => sum + t.data.days, 0);
       </div>
     </div>
 
-    <!-- Scroll hint -->
-    <div class="absolute bottom-4 right-6 text-stone-400 text-xs flex items-center gap-1.5 pointer-events-none">
-      <span>Click a route to read the journal</span>
-      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5" />
+    <!-- Scroll indicator -->
+    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center gap-1">
+      <span class="text-stone-400 text-xs uppercase tracking-widest">Scroll</span>
+      <svg class="w-5 h-5 text-stone-400 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
       </svg>
     </div>
   </section>
