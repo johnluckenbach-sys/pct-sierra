@@ -1,13 +1,11 @@
 /**
- * Fetches trip metadata from a published Google Sheet CSV.
+ * Loads trip metadata from CSV — either a local file or a published Google Sheet.
  *
- * Setup:
- *   1. In Google Sheets: File → Share → Publish to web
- *      → select your sheet → CSV → Publish
- *   2. Copy the URL and add to .env:
- *      SHEET_CSV_URL=https://docs.google.com/spreadsheets/d/.../pub?output=csv
+ * Local file (default): src/data/trips.csv
+ * Google Sheet override: set SHEET_CSV_URL in .env
+ *   SHEET_CSV_URL=https://docs.google.com/spreadsheets/d/.../pub?output=csv
  *
- * Sheet columns (header row required, order doesn't matter):
+ * CSV columns (header row required, order doesn't matter):
  *   slug | title | year | startDate | endDate | days | miles |
  *   elevationGain | startPoint | endPoint | pctMileStart | pctMileEnd |
  *   description | tags
@@ -16,6 +14,10 @@
  * Tags should be comma-separated within the cell (e.g. "solo, sierra, permit").
  * Empty cells are ignored — MDX values are used as fallback.
  */
+
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export interface SheetTrip {
   slug:           string;
@@ -71,50 +73,69 @@ function parseCSV(text: string): Record<string, string>[] {
     });
 }
 
-// ── Fetch + build lookup map ──────────────────────────────────────────────────
+// ── Build lookup map from parsed rows ─────────────────────────────────────────
+function rowsToMap(rows: Record<string, string>[]): Record<string, SheetTrip> {
+  const map: Record<string, SheetTrip> = {};
+
+  for (const row of rows) {
+    const slug = row['slug'];
+    if (!slug) continue;
+
+    const trip: SheetTrip = { slug };
+
+    const str  = (key: string) => row[key] || undefined;
+    const int  = (key: string) => row[key] ? parseInt(row[key],  10) || undefined : undefined;
+    const flt  = (key: string) => row[key] ? parseFloat(row[key])   || undefined : undefined;
+    const tags = (key: string) => row[key]
+      ? row[key].split(',').map(t => t.trim()).filter(Boolean)
+      : undefined;
+
+    trip.title         = str('title');
+    trip.year          = int('year');
+    trip.startDate     = str('startdate')  ?? str('startDate');
+    trip.endDate       = str('enddate')    ?? str('endDate');
+    trip.days          = int('days');
+    trip.miles         = flt('miles');
+    trip.elevationGain = int('elevationgain') ?? int('elevationGain');
+    trip.startPoint    = str('startpoint') ?? str('startPoint');
+    trip.endPoint      = str('endpoint')   ?? str('endPoint');
+    trip.pctMileStart  = int('pctmilestart') ?? int('pctMileStart');
+    trip.pctMileEnd    = int('pctmileend')   ?? int('pctMileEnd');
+    trip.description   = str('description');
+    trip.tags          = tags('tags');
+
+    // Strip undefined keys so spread merge works cleanly
+    (Object.keys(trip) as (keyof SheetTrip)[]).forEach(k => {
+      if (trip[k] === undefined) delete trip[k];
+    });
+
+    map[slug] = trip;
+  }
+
+  return map;
+}
+
+// ── Load from local CSV file ──────────────────────────────────────────────────
+export function loadLocalTripSheet(): Record<string, SheetTrip> {
+  const csvPath = join(dirname(fileURLToPath(import.meta.url)), '../data/trips.csv');
+  try {
+    const text = readFileSync(csvPath, 'utf-8').replace(/^﻿/, '');
+    const map = rowsToMap(parseCSV(text));
+    console.log(`[TripSheet] Loaded ${Object.keys(map).length} rows from local CSV`);
+    return map;
+  } catch (err) {
+    console.warn('[TripSheet] Could not read local CSV — using MDX values only:', err);
+    return {};
+  }
+}
+
+// ── Fetch from Google Sheet URL ───────────────────────────────────────────────
 export async function fetchTripSheet(url: string): Promise<Record<string, SheetTrip>> {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const rows = parseCSV(await res.text());
-    const map: Record<string, SheetTrip> = {};
-
-    for (const row of rows) {
-      const slug = row['slug'];
-      if (!slug) continue;
-
-      const trip: SheetTrip = { slug };
-
-      const str  = (key: string) => row[key] || undefined;
-      const int  = (key: string) => row[key] ? parseInt(row[key],  10) || undefined : undefined;
-      const flt  = (key: string) => row[key] ? parseFloat(row[key])   || undefined : undefined;
-      const tags = (key: string) => row[key]
-        ? row[key].split(',').map(t => t.trim()).filter(Boolean)
-        : undefined;
-
-      trip.title         = str('title');
-      trip.year          = int('year');
-      trip.startDate     = str('startdate')  ?? str('startDate');
-      trip.endDate       = str('enddate')    ?? str('endDate');
-      trip.days          = int('days');
-      trip.miles         = flt('miles');
-      trip.elevationGain = int('elevationgain') ?? int('elevationGain');
-      trip.startPoint    = str('startpoint') ?? str('startPoint');
-      trip.endPoint      = str('endpoint')   ?? str('endPoint');
-      trip.pctMileStart  = int('pctmilestart') ?? int('pctMileStart');
-      trip.pctMileEnd    = int('pctmileend')   ?? int('pctMileEnd');
-      trip.description   = str('description');
-      trip.tags          = tags('tags');
-
-      // Strip undefined keys so spread merge works cleanly
-      (Object.keys(trip) as (keyof SheetTrip)[]).forEach(k => {
-        if (trip[k] === undefined) delete trip[k];
-      });
-
-      map[slug] = trip;
-    }
-
-    console.log(`[TripSheet] Loaded ${Object.keys(map).length} rows`);
+    const map = rowsToMap(parseCSV(await res.text()));
+    console.log(`[TripSheet] Loaded ${Object.keys(map).length} rows from Google Sheet`);
     return map;
   } catch (err) {
     console.warn('[TripSheet] Could not fetch sheet — using MDX values only:', err);

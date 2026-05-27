@@ -4,9 +4,15 @@ import Layout from '../../layouts/Layout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import TripCard from '../../components/TripCard.astro';
+import { fetchTripSheet, loadLocalTripSheet, mergeSheetData } from '../../lib/trip-sheet';
+
+const sheetUrl = import.meta.env.SHEET_CSV_URL;
+const sheet    = sheetUrl ? await fetchTripSheet(sheetUrl) : loadLocalTripSheet();
 
 const allTrips = await getCollection('trips');
-const trips = allTrips.sort((a, b) => a.data.year - b.data.year);
+const trips = allTrips
+  .map(t => ({ ...t, data: mergeSheetData(t.data, sheet[t.id]) }))
+  .sort((a, b) => a.data.year - b.data.year);
 
 const totalMiles = trips.reduce((sum, t) => sum + t.data.miles, 0);
 const totalDays = trips.reduce((sum, t) => sum + t.data.days, 0);

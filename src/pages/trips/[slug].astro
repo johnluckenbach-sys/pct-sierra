@@ -5,20 +5,19 @@ import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import Map from '../../components/Map.astro';
 import ElevationProfile from '../../components/ElevationProfile.astro';
-import { fetchTripSheet, mergeSheetData } from '../../lib/trip-sheet';
+import { fetchTripSheet, loadLocalTripSheet, mergeSheetData } from '../../lib/trip-sheet';
 
 export async function getStaticPaths() {
   const trips = await getCollection('trips');
-  return trips.map(trip => ({ params: { slug: trip.id }, props: { trip } }));
+  const sheetUrl = import.meta.env.SHEET_CSV_URL;
+  const sheet    = sheetUrl ? await fetchTripSheet(sheetUrl) : loadLocalTripSheet();
+  return trips.map(trip => ({ params: { slug: trip.id }, props: { trip, sheet } }));
 }
 
-const { trip } = Astro.props;
+const { trip, sheet } = Astro.props;
 const { Content } = await render(trip);
 
-// Merge Google Sheet metadata (sheet wins over MDX frontmatter)
-const sheetUrl = import.meta.env.SHEET_CSV_URL;
-const sheet    = sheetUrl ? await fetchTripSheet(sheetUrl) : {};
-const d        = mergeSheetData(trip.data, sheet[trip.id]);
+const d = mergeSheetData(trip.data, sheet[trip.id]);
 
 // Single trip for the map — individual pages show only their own route
 const mapTrips = [{
