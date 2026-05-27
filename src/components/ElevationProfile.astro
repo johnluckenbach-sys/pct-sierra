@@ -58,7 +58,7 @@ import { gpx as parseGpx } from '@tmcw/togeojson';
 
 // ── Types ──────────────────────────────────────────────────────────────
 interface RoutePoint { lon: number; lat: number; distMi: number; elevFt: number; }
-interface AnnInput   { type: string; label: string; note?: string; coordinates: [number,number]; }
+interface AnnInput   { type: string; label: string; note?: string; coordinates: [number,number]; distMi?: number; }
 
 // ── DOM refs ───────────────────────────────────────────────────────────
 const dataEl    = document.getElementById('elev-data')!    as HTMLElement;
@@ -190,9 +190,11 @@ async function run() {
   const waypointAnns: AnnInput[] = features
     .filter((f: any) => f.geometry?.type === 'Point')
     .map((f: any) => {
-      const coords = f.geometry.coordinates as [number, number];
-      const label  = f.properties?.title ?? f.properties?.name ?? 'Waypoint';
-      return { type: detectType(label), label, coordinates: coords };
+      const coords  = f.geometry.coordinates as [number, number];
+      const label   = f.properties?.title ?? f.properties?.name ?? 'Waypoint';
+      const cmt     = f.properties?.comment ?? f.properties?.cmt;
+      const distMi  = cmt !== undefined && cmt !== null && !isNaN(parseFloat(cmt)) ? parseFloat(cmt) : undefined;
+      return { type: detectType(label), label, coordinates: coords, distMi };
     });
 
   const allAnnotations: AnnInput[] = [...annotations, ...waypointAnns];
@@ -200,7 +202,9 @@ async function run() {
   const annMarkers = allAnnotations.map(ann => {
     let minD = Infinity, minI = 0;
     points.forEach((p, i) => {
-      const d = (p.lon - ann.coordinates[0])**2 + (p.lat - ann.coordinates[1])**2;
+      const d = ann.distMi !== undefined
+        ? Math.abs(p.distMi - ann.distMi)
+        : (p.lon - ann.coordinates[0])**2 + (p.lat - ann.coordinates[1])**2;
       if (d < minD) { minD = d; minI = i; }
     });
     return { index: minI, label: ann.label, type: ann.type };

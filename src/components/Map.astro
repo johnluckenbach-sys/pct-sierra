@@ -103,12 +103,12 @@ const { trips, annotations = [], class: className = '' } = Astro.props;
     const padding   = singleTrip
       ? { top: 60,  bottom: 60, left: 60, right: 60 }
       : { top: 80,  bottom: 60, left: 60, right: 60 };
-    const initBounds = allCoords.length >= 2
+    const initBounds = singleTrip && allCoords.length >= 2
       ? allCoords.reduce(
           (b, c) => b.extend(c as [number, number]),
           new mapboxgl.LngLatBounds(allCoords[0] as [number, number], allCoords[0] as [number, number])
         )
-      : new mapboxgl.LngLatBounds([-120.4, 36.0], [-118.0, 38.5]);
+      : new mapboxgl.LngLatBounds([-120.5, 35.8], [-117.8, 39.2]);
 
     const map = new mapboxgl.Map({
       container: 'map',
@@ -142,6 +142,7 @@ const { trips, annotations = [], class: className = '' } = Astro.props;
     const popup      = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 12, maxWidth: '260px' });
     let routesFitted = false;
     let initialized  = false;
+
 
     // ── addLayers — called on every style.load ─────────────────
     async function addLayers() {
@@ -195,8 +196,8 @@ const { trips, annotations = [], class: className = '' } = Astro.props;
         });
       }
 
-      // 3. Refit to actual route geometry (first load only)
-      if (!routesFitted) {
+      // 3. Refit to actual route geometry (single-trip only — multi-trip starts at Sierra-wide bounds)
+      if (!routesFitted && singleTrip) {
         const fitBounds = new mapboxgl.LngLatBounds();
         let hasFitData  = false;
         for (const trip of trips) {
