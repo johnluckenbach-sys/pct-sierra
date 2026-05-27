@@ -1,0 +1,67 @@
+---
+/**
+ * Styled callout block for logistics tips, gear notes, permit info, etc.
+ *
+ * Usage in .mdx:
+ *   import Callout from '../../components/mdx/Callout.astro';
+ *   <Callout type="tip" title="Permit Strategy">
+ *     The Whitney Zone permit opens 6 months in advance on Recreation.gov.
+ *     Set a calendar reminder and be online at 7 AM PST.
+ *   </Callout>
+ *
+ * types: tip | gear | permit | warning
+ */
+interface Props {
+  type?: 'tip' | 'gear' | 'permit' | 'warning';
+  title?: string;
+}
+
+const { type = 'tip', title } = Astro.props;
+
+const styles = {
+  tip: {
+    border: 'border-forest-200',
+    bg: 'bg-forest-50',
+    icon: '💡',
+    label: 'Tip',
+    titleColor: 'text-forest-800',
+    bodyColor: 'text-forest-900',
+  },
+  gear: {
+    border: 'border-amber-200',
+    bg: 'bg-amber-50',
+    icon: '🎒',
+    label: 'Gear',
+    titleColor: 'text-amber-900',
+    bodyColor: 'text-amber-950',
+  },
+  permit: {
+    border: 'border-sky-200',
+    bg: 'bg-sky-50',
+    icon: '📋',
+    label: 'Permit',
+    titleColor: 'text-sky-900',
+    bodyColor: 'text-sky-950',
+  },
+  warning: {
+    border: 'border-red-200',
+    bg: 'bg-red-50',
+    icon: '⚠️',
+    label: 'Note',
+    titleColor: 'text-red-900',
+    bodyColor: 'text-red-950',
+  },
+};
+
+const s = styles[type];
+---
+
+<aside class={`my-6 not-prose rounded-xl border ${s.border} ${s.bg} px-5 py-4`}>
+  <div class={`flex items-center gap-2 mb-1.5 font-semibold text-sm ${s.titleColor}`}>
+    <span>{s.icon}</span>
+    <span>{title ?? s.label}</span>
+  </div>
+  <div class={`text-sm leading-relaxed ${s.bodyColor}`}>
+    <slot />
+  </div>
+</aside>

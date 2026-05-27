@@ -1,0 +1,202 @@
+---
+import { getCollection, render } from 'astro:content';
+import Layout from '../../layouts/Layout.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import Map from '../../components/Map.astro';
+import ElevationProfile from '../../components/ElevationProfile.astro';
+import { fetchTripSheet, mergeSheetData } from '../../lib/trip-sheet';
+
+export async function getStaticPaths() {
+  const trips = await getCollection('trips');
+  return trips.map(trip => ({ params: { slug: trip.id }, props: { trip } }));
+}
+
+const { trip } = Astro.props;
+const { Content } = await render(trip);
+
+// Merge Google Sheet metadata (sheet wins over MDX frontmatter)
+const sheetUrl = import.meta.env.SHEET_CSV_URL;
+const sheet    = sheetUrl ? await fetchTripSheet(sheetUrl) : {};
+const d        = mergeSheetData(trip.data, sheet[trip.id]);
+
+// Single trip for the map — individual pages show only their own route
+const mapTrips = [{
+  slug: trip.id,
+  title: d.title,
+  year: d.year,
+  days: d.days,
+  miles: d.miles,
+  startPoint: d.startPoint,
+  endPoint: d.endPoint,
+  description: d.description,
+  coordinates: d.coordinates,
+  color: d.color,
+  routeFile: d.routeFile,
+}];
+
+const mapAnnotations = (d.annotations ?? []).map(a => ({ ...a }));
+
+// Sorted trips for prev/next navigation
+const allTrips = await getCollection('trips');
+const sorted = allTrips.sort((a, b) => a.data.year - b.data.year);
+const currentIndex = sorted.findIndex(t => t.id === trip.id);
+const prevTrip = currentIndex > 0 ? sorted[currentIndex - 1] : null;
+const nextTrip = currentIndex < sorted.length - 1 ? sorted[currentIndex + 1] : null;
+---
+
+<Layout title={`${d.title} — PCT Sierra`} description={d.description}>
+  <Header />
+
+  <main class="pt-14 min-h-screen">
+    <!-- Map strip -->
+    <div class="relative h-72 sm:h-96 bg-stone-200">
+      <Map trips={mapTrips} annotations={mapAnnotations} class="absolute inset-0" />
+      <!-- Year badge -->
+      <div class="absolute top-4 left-4 z-10">
+        <span
+          class="inline-block text-white text-sm font-semibold px-3 py-1 rounded-full shadow"
+          style={`background-color: ${d.color}`}
+        >
+          {d.year}
+        </span>
+      </div>
+    </div>
+
+    <!-- Elevation profile (only when a route file is present) -->
+    {d.routeFile && (
+      <ElevationProfile
+        routeFile={d.routeFile}
+        color={d.color}
+        annotations={mapAnnotations}
+      />
+    )}
+
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+
+        <!-- Sidebar: trip stats -->
+        <aside class="lg:order-2 space-y-5">
+          <div class="bg-white rounded-xl border border-stone-200 overflow-hidden">
+            <div class="h-1" style={`background-color: ${d.color}`}></div>
+            <div class="p-5 space-y-4">
+              <h2 class="text-sm font-semibold text-stone-500 uppercase tracking-wider">Trip Stats</h2>
+              <dl class="space-y-3">
+                <div class="flex justify-between text-sm">
+                  <dt class="text-stone-400">Miles</dt>
+                  <dd class="font-semibold text-stone-800">{d.miles}</dd>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <dt class="text-stone-400">Days</dt>
+                  <dd class="font-semibold text-stone-800">{d.days}</dd>
+                </div>
+                {d.elevationGain && (
+                  <div class="flex justify-between text-sm">
+                    <dt class="text-stone-400">Elevation Gain</dt>
+                    <dd class="font-semibold text-stone-800">{d.elevationGain.toLocaleString()} ft</dd>
+                  </div>
+                )}
+                <div class="border-t border-stone-100 pt-3">
+                  <div class="flex justify-between text-sm">
+                    <dt class="text-stone-400">Start</dt>
+                    <dd class="font-medium text-stone-700 text-right max-w-[60%]">{d.startPoint}</dd>
+                  </div>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <dt class="text-stone-400">End</dt>
+                  <dd class="font-medium text-stone-700 text-right max-w-[60%]">{d.endPoint}</dd>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <dt class="text-stone-400">PCT Miles</dt>
+                  <dd class="font-semibold text-stone-800">{d.pctMileStart}–{d.pctMileEnd}</dd>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <dt class="text-stone-400">Dates</dt>
+                  <dd class="font-medium text-stone-700">{d.startDate} → {d.endDate}</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+
+          {d.highlights && d.highlights.length > 0 && (
+            <div class="bg-white rounded-xl border border-stone-200 p-5">
+              <h2 class="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">Highlights</h2>
+              <ul class="space-y-2">
+                {d.highlights.map(h => (
+                  <li class="flex gap-2 text-sm text-stone-600">
+                    <span class="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full" style={`background-color: ${d.color}`}></span>
+                    {h}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <!-- Tags -->
+          <div class="flex flex-wrap gap-1.5">
+            {d.tags.map(tag => (
+              <span class="text-xs text-stone-500 bg-stone-100 rounded-full px-2.5 py-1">{tag}</span>
+            ))}
+          </div>
+        </aside>
+
+        <!-- Main content: journal -->
+        <article class="lg:col-span-2 lg:order-1">
+          <header class="mb-8">
+            <p class="text-amber-600 text-sm font-medium tracking-widest uppercase mb-2">
+              PCT · Mi {d.pctMileStart}–{d.pctMileEnd}
+            </p>
+            <h1 class="text-3xl sm:text-4xl font-bold text-stone-900 leading-tight mb-3" style="font-family: 'Lora', serif;">
+              {d.title}
+            </h1>
+            <p class="text-stone-500 text-lg leading-relaxed">{d.description}</p>
+          </header>
+
+          <div class="prose prose-stone max-w-none
+            prose-headings:font-bold prose-headings:text-stone-900
+            prose-h2:text-xl prose-h2:mt-10 prose-h2:mb-4
+            prose-p:text-stone-700 prose-p:leading-relaxed prose-p:my-4
+            prose-strong:text-stone-900
+            prose-a:text-forest-600 prose-a:no-underline hover:prose-a:underline">
+            <Content />
+          </div>
+        </article>
+      </div>
+
+      <!-- Prev / Next navigation -->
+      <nav class="mt-16 pt-8 border-t border-stone-200 grid grid-cols-2 gap-4">
+        <div>
+          {prevTrip && (
+            <a href={`/trips/${prevTrip.id}`} class="group flex flex-col gap-1 p-4 rounded-xl border border-stone-200 hover:border-stone-300 hover:shadow-sm transition-all">
+              <span class="text-xs text-stone-400 uppercase tracking-wider">← Previous</span>
+              <span class="text-sm font-semibold text-stone-700 group-hover:text-stone-900" style="font-family: 'Lora', serif;">
+                {prevTrip.data.title}
+              </span>
+              <span class="text-xs text-stone-400">{prevTrip.data.year}</span>
+            </a>
+          )}
+        </div>
+        <div class="flex justify-end">
+          {nextTrip && (
+            <a href={`/trips/${nextTrip.id}`} class="group flex flex-col gap-1 p-4 rounded-xl border border-stone-200 hover:border-stone-300 hover:shadow-sm transition-all text-right">
+              <span class="text-xs text-stone-400 uppercase tracking-wider">Next →</span>
+              <span class="text-sm font-semibold text-stone-700 group-hover:text-stone-900" style="font-family: 'Lora', serif;">
+                {nextTrip.data.title}
+              </span>
+              <span class="text-xs text-stone-400">{nextTrip.data.year}</span>
+            </a>
+          )}
+        </div>
+      </nav>
+    </div>
+  </main>
+
+  <Footer />
+</Layout>
+
+<style is:global>
+  .prose p {
+    font-size: 1.0625rem;
+    line-height: 1.8;
+  }
+</style>

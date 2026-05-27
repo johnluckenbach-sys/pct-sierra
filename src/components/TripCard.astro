@@ -1,0 +1,57 @@
+---
+interface Props {
+  slug: string;
+  title: string;
+  year: number;
+  days: number;
+  miles: number;
+  startPoint: string;
+  endPoint: string;
+  pctMileStart: number;
+  pctMileEnd: number;
+  description: string;
+  color: string;
+  tags: string[];
+}
+
+const { slug, title, year, days, miles, startPoint, endPoint, pctMileStart, pctMileEnd, description, color, tags } = Astro.props;
+---
+
+<a
+  href={`/trips/${slug}`}
+  class="group block bg-white rounded-xl border border-stone-200 overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+>
+  <div class="h-1.5 w-full" style={`background-color: ${color}`}></div>
+  <div class="p-5">
+    <div class="flex items-start justify-between gap-3 mb-2">
+      <h3 class="font-semibold text-stone-900 group-hover:text-forest-700 leading-snug" style="font-family: 'Lora', serif;">
+        {title}
+      </h3>
+      <span class="shrink-0 text-xs font-medium px-2 py-0.5 rounded-full text-white" style={`background-color: ${color}`}>
+        {year}
+      </span>
+    </div>
+
+    <p class="text-sm text-stone-500 mb-4 leading-relaxed">{description}</p>
+
+    <div class="grid grid-cols-3 gap-2 text-center mb-4">
+      <div class="bg-stone-50 rounded-lg py-2 px-1">
+        <div class="text-base font-semibold text-stone-800">{miles}</div>
+        <div class="text-xs text-stone-400">miles</div>
+      </div>
+      <div class="bg-stone-50 rounded-lg py-2 px-1">
+        <div class="text-base font-semibold text-stone-800">{days}</div>
+        <div class="text-xs text-stone-400">days</div>
+      </div>
+      <div class="bg-stone-50 rounded-lg py-2 px-1">
+        <div class="text-base font-semibold text-stone-800">{pctMileEnd - pctMileStart}</div>
+        <div class="text-xs text-stone-400">mi covered</div>
+      </div>
+    </div>
+
+    <div class="text-xs text-stone-400 flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full shrink-0" style={`background-color: ${color}`}></span>
+      <span class="truncate">{startPoint} → {endPoint}</span>
+    </div>
+  </div>
+</a>

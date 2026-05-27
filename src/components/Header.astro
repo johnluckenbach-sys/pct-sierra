@@ -1,0 +1,38 @@
+---
+const navLinks = [
+  { href: '/', label: 'Map' },
+  { href: '/trips', label: 'All Trips' },
+  { href: '/about', label: 'About' },
+];
+
+const currentPath = Astro.url.pathname;
+---
+
+<header class="fixed top-0 left-0 right-0 z-50 bg-stone-900/90 backdrop-blur-sm border-b border-stone-700">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
+    <a href="/" class="flex items-center gap-2 group">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="text-amber-400">
+        <path d="M12 2L2 19h20L12 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M8 19v-4a4 4 0 018 0v4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      </svg>
+      <span class="text-white font-semibold tracking-wide text-sm" style="font-family: 'Lora', serif;">
+        PCT Sierra
+      </span>
+    </a>
+
+    <nav class="flex items-center gap-1">
+      {navLinks.map(({ href, label }) => (
+        <a
+          href={href}
+          class={`px-3 py-1.5 rounded text-sm transition-colors ${
+            currentPath === href
+              ? 'text-amber-400 bg-stone-800'
+              : 'text-stone-300 hover:text-white hover:bg-stone-800'
+          }`}
+        >
+          {label}
+        </a>
+      ))}
+    </nav>
+  </div>
+</header>

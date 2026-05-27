@@ -1,0 +1,140 @@
+---
+import { getCollection } from 'astro:content';
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import Map from '../components/Map.astro';
+import TripCard from '../components/TripCard.astro';
+import { fetchTripSheet, mergeSheetData } from '../lib/trip-sheet';
+
+const sheetUrl  = import.meta.env.SHEET_CSV_URL;
+const sheet     = sheetUrl ? await fetchTripSheet(sheetUrl) : {};
+
+const allTrips  = await getCollection('trips');
+const trips     = allTrips
+  .map(t => ({ ...t, data: mergeSheetData(t.data, sheet[t.id]) }))
+  .sort((a, b) => a.data.year - b.data.year);
+
+// Assign a 4-color palette sorted south→north so adjacent routes
+// never share a similar color. Trips with unknown PCT miles go last.
+const MAP_PALETTE = ['#e07b39', '#2563eb', '#db2777', '#0d9488', '#d97706', '#7c3aed'];
+const geoSorted = [...allTrips].sort((a, b) => {
+  const aM = a.data.pctMileStart || Infinity;
+  const bM = b.data.pctMileStart || Infinity;
+  return aM - bM;
+});
+const paletteColor: Record<string, string> = {};
+geoSorted.forEach((t, i) => { paletteColor[t.id] = MAP_PALETTE[i % MAP_PALETTE.length]; });
+
+const mapTrips = trips.map(t => ({
+  slug: t.id,
+  title: t.data.title,
+  year: t.data.year,
+  days: t.data.days,
+  miles: t.data.miles,
+  startPoint: t.data.startPoint,
+  endPoint: t.data.endPoint,
+  description: t.data.description,
+  coordinates: t.data.coordinates,
+  color: paletteColor[t.id] ?? t.data.color,
+  routeFile: t.data.routeFile,
+}));
+
+const totalMiles = trips.reduce((sum, t) => sum + t.data.miles, 0);
+const totalDays = trips.reduce((sum, t) => sum + t.data.days, 0);
+---
+
+<Layout>
+  <Header />
+
+  <!-- Hero: full-viewport map -->
+  <section class="relative h-screen">
+    <Map trips={mapTrips} class="absolute inset-0" />
+
+    <!-- Overlay title -->
+    <div class="absolute bottom-0 left-0 right-0 pointer-events-none">
+      <div class="bg-gradient-to-t from-stone-900/80 via-stone-900/40 to-transparent pt-24 pb-8 px-6">
+        <div class="max-w-6xl mx-auto">
+          <p class="text-amber-400 text-sm font-medium tracking-widest uppercase mb-2">PCT Sierra Section · Mi 702–1090</p>
+          <h1 class="text-white text-4xl sm:text-5xl font-bold leading-tight mb-3" style="font-family: 'Lora', serif;">
+            Six Years in the<br />High Country
+          </h1>
+          <p class="text-stone-300 text-base sm:text-lg max-w-xl mb-6">
+            Walking the Sierra from Kennedy Meadows to Echo Lake — one long weekend at a time, without pausing a career.
+          </p>
+          <!-- Stats bar -->
+          <div class="flex flex-wrap gap-6 pointer-events-auto">
+            <div>
+              <div class="text-white text-2xl font-semibold">{totalMiles}</div>
+              <div class="text-stone-400 text-xs uppercase tracking-wider">Total Miles</div>
+            </div>
+            <div class="w-px bg-stone-600"></div>
+            <div>
+              <div class="text-white text-2xl font-semibold">{trips.length}</div>
+              <div class="text-stone-400 text-xs uppercase tracking-wider">Trips</div>
+            </div>
+            <div class="w-px bg-stone-600"></div>
+            <div>
+              <div class="text-white text-2xl font-semibold">{totalDays}</div>
+              <div class="text-stone-400 text-xs uppercase tracking-wider">Days on Trail</div>
+            </div>
+            <div class="w-px bg-stone-600"></div>
+            <div>
+              <div class="text-white text-2xl font-semibold">6</div>
+              <div class="text-stone-400 text-xs uppercase tracking-wider">Years</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scroll hint -->
+    <div class="absolute bottom-4 right-6 text-stone-400 text-xs flex items-center gap-1.5 pointer-events-none">
+      <span>Click a route to read the journal</span>
+      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5" />
+      </svg>
+    </div>
+  </section>
+
+  <!-- Trip cards grid -->
+  <section class="bg-trail-50 py-16 px-4 sm:px-6">
+    <div class="max-w-6xl mx-auto">
+      <div class="flex items-baseline justify-between mb-8">
+        <h2 class="text-2xl font-bold text-stone-900" style="font-family: 'Lora', serif;">The Journey</h2>
+        <a href="/trips" class="text-sm text-forest-600 hover:text-forest-800 font-medium">View all →</a>
+      </div>
+
+      <!-- Year legend -->
+      <div class="flex flex-wrap gap-3 mb-8">
+        {trips.map(t => (
+          <a href={`/trips/${t.id}`} class="flex items-center gap-1.5 text-xs text-stone-500 hover:text-stone-800 transition-colors">
+            <span class="w-3 h-3 rounded-full" style={`background-color: ${paletteColor[t.id] ?? t.data.color}`}></span>
+            {t.data.title}
+          </a>
+        ))}
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {trips.map(trip => (
+          <TripCard
+            slug={trip.id}
+            title={trip.data.title}
+            year={trip.data.year}
+            days={trip.data.days}
+            miles={trip.data.miles}
+            startPoint={trip.data.startPoint}
+            endPoint={trip.data.endPoint}
+            pctMileStart={trip.data.pctMileStart}
+            pctMileEnd={trip.data.pctMileEnd}
+            description={trip.data.description}
+            color={trip.data.color}
+            tags={trip.data.tags}
+          />
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <Footer />
+</Layout>

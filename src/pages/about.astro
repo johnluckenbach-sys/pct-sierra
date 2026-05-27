@@ -1,0 +1,115 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<Layout title="About — PCT Sierra">
+  <Header />
+
+  <main class="pt-20 pb-16 px-4 sm:px-6 min-h-screen">
+    <div class="max-w-2xl mx-auto py-12">
+
+      <p class="text-amber-600 text-sm font-medium tracking-widest uppercase mb-3">About</p>
+      <h1 class="text-4xl font-bold text-stone-900 mb-8" style="font-family: 'Lora', serif;">
+        Six Years, One Long Weekend at a Time
+      </h1>
+
+      <div class="space-y-6 text-stone-600 text-lg leading-relaxed">
+        <p>
+          I've been a working professional for my entire adult life. Mortgages, quarterly reviews,
+          on-call rotations — the things that accumulate when you build a career.
+          I never had the option of taking five months off to hike a trail.
+        </p>
+
+        <p>
+          What I did have was four-day weekends, accumulated PTO, and an obsession with the
+          Sierra Nevada that started the first time I drove up Highway 395.
+        </p>
+
+        <p>
+          The PCT Sierra section — roughly from Kennedy Meadows South to Echo Lake, about 450
+          miles through the highest, most spectacular terrain in California — is something
+          I've been slowly walking for six years. A long weekend in July here, a five-day
+          push in August there. Each trip carefully planned around product launches, performance
+          reviews, and school years.
+        </p>
+
+        <p>
+          I built this site to document the journey: the actual routes, the trip reports,
+          the itineraries. But also the logistics of doing this <em>while working</em> —
+          the permit strategies, the gear lists, the resupply planning that happens on
+          lunch breaks.
+        </p>
+
+        <p>
+          The Sierra doesn't care about your job title. It just asks that you show up,
+          and keep showing up, year after year, until you've walked all of it.
+        </p>
+      </div>
+
+      <!-- Divider -->
+      <div class="my-12 border-t border-stone-200"></div>
+
+      <h2 class="text-xl font-bold text-stone-900 mb-6" style="font-family: 'Lora', serif;">The Route</h2>
+      <div class="bg-white rounded-xl border border-stone-200 overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-stone-100 bg-stone-50">
+              <th class="text-left px-4 py-3 text-stone-500 font-medium">Year</th>
+              <th class="text-left px-4 py-3 text-stone-500 font-medium">Section</th>
+              <th class="text-right px-4 py-3 text-stone-500 font-medium">Miles</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-stone-100">
+            <tr>
+              <td class="px-4 py-3 font-medium text-stone-700">2019</td>
+              <td class="px-4 py-3 text-stone-600">Kennedy Meadows → Crabtree</td>
+              <td class="px-4 py-3 text-right text-stone-700">53</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-medium text-stone-700">2020</td>
+              <td class="px-4 py-3 text-stone-600">Crabtree → Rae Lakes</td>
+              <td class="px-4 py-3 text-right text-stone-700">62</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-medium text-stone-700">2021</td>
+              <td class="px-4 py-3 text-stone-600">Rae Lakes → VVR</td>
+              <td class="px-4 py-3 text-right text-stone-700">75</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-medium text-stone-700">2022</td>
+              <td class="px-4 py-3 text-stone-600">VVR → Reds Meadow</td>
+              <td class="px-4 py-3 text-right text-stone-700">34</td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-medium text-stone-700">2023</td>
+              <td class="px-4 py-3 text-stone-600">Reds Meadow → Tuolumne</td>
+              <td class="px-4 py-3 text-right text-stone-700">36</td>
+            </tr>
+            <tr class="bg-amber-50">
+              <td class="px-4 py-3 font-medium text-stone-700">2024</td>
+              <td class="px-4 py-3 text-stone-600">Tuolumne → Echo Lake</td>
+              <td class="px-4 py-3 text-right text-stone-700">78</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="border-t-2 border-stone-200 bg-stone-50">
+              <td class="px-4 py-3 font-bold text-stone-800" colspan="2">Total</td>
+              <td class="px-4 py-3 text-right font-bold text-stone-800">338</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="mt-12 p-5 bg-stone-100 rounded-xl border border-stone-200 text-sm text-stone-600">
+        <strong class="block text-stone-800 mb-1">Want to do this too?</strong>
+        All itineraries, permit strategies, and gear notes are in each trip report.
+        The short version: get a Recreational.gov account, set calendar reminders for permit windows,
+        and tell your manager you have a "personal appointment" on the Friday before a long weekend.
+      </div>
+    </div>
+  </main>
+
+  <Footer />
+</Layout>

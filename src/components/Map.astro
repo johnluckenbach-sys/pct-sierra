@@ -1,0 +1,330 @@
+---
+export interface TripMapData {
+  slug: string;
+  title: string;
+  year: number;
+  days: number;
+  miles: number;
+  startPoint: string;
+  endPoint: string;
+  description: string;
+  routeFile?: string;
+  coordinates: [number, number][];
+  color: string;
+}
+
+export interface AnnotationData {
+  type: 'campsite' | 'water' | 'notable' | 'viewpoint' | 'trailhead';
+  label: string;
+  note?: string;
+  coordinates: [number, number];
+}
+
+interface Props {
+  trips: TripMapData[];
+  annotations?: AnnotationData[];
+  class?: string;
+}
+
+const { trips, annotations = [], class: className = '' } = Astro.props;
+---
+
+<div class={className || 'relative w-full h-full'}>
+  <div id="map-data"
+    data-trips={JSON.stringify(trips)}
+    data-annotations={JSON.stringify(annotations)}
+    style="display:none"
+  ></div>
+  <div id="map" style="position:absolute;top:0;right:0;bottom:0;left:0;"></div>
+
+  <div id="map-warning" class="hidden absolute inset-0 flex items-center justify-center bg-stone-100">
+    <div class="text-center max-w-sm px-6">
+      <svg class="w-12 h-12 text-stone-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6-13l6 3m0 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4" />
+      </svg>
+      <h3 class="font-semibold text-stone-700 mb-1" style="font-family:'Lora',serif">Map needs a Mapbox token</h3>
+      <p class="text-sm text-stone-500 mb-3">Add your free token to a <code class="bg-stone-200 px-1 rounded">.env</code> file and restart the dev server.</p>
+      <code class="block text-xs bg-stone-800 text-green-400 px-4 py-2 rounded text-left">PUBLIC_MAPBOX_TOKEN=pk.your_token</code>
+    </div>
+  </div>
+</div>
+
+
+<script>
+  import mapboxgl from 'mapbox-gl';
+  import 'mapbox-gl/dist/mapbox-gl.css';
+  import { gpx as parseGpx } from '@tmcw/togeojson';
+
+  interface TripMapData {
+    slug: string; title: string; year: number; days: number; miles: number;
+    startPoint: string; endPoint: string; description: string;
+    routeFile?: string; coordinates: [number, number][]; color: string;
+  }
+  interface AnnotationData {
+    type: 'campsite' | 'water' | 'notable' | 'viewpoint' | 'trailhead';
+    label: string; note?: string; coordinates: [number, number];
+  }
+
+  const dataEl      = document.getElementById('map-data') as HTMLElement;
+  const trips: TripMapData[]        = JSON.parse(dataEl.dataset.trips!);
+  const annotations: AnnotationData[] = JSON.parse(dataEl.dataset.annotations!);
+  const singleTrip  = trips.length === 1;
+  const token       = import.meta.env.PUBLIC_MAPBOX_TOKEN;
+
+  // ── Helpers ────────────────────────────────────────────────────
+  const isGpx = (url: string) => url.toLowerCase().endsWith('.gpx');
+
+  async function loadAsGeoJSON(url: string): Promise<GeoJSON.FeatureCollection> {
+    const res = await fetch(url);
+    if (isGpx(url)) {
+      const text = await res.text();
+      const dom  = new DOMParser().parseFromString(text, 'text/xml');
+      return parseGpx(dom) as GeoJSON.FeatureCollection;
+    }
+    return res.json();
+  }
+
+  function showError(msg: string) {
+    const el = document.getElementById('map-warning')!;
+    el.querySelector('h3')!.textContent = 'Map error';
+    el.querySelector('p')!.textContent  = msg;
+    el.querySelector('code')!.textContent = '';
+    el.classList.remove('hidden');
+    document.getElementById('map')!.style.display = 'none';
+    console.error('[Map]', msg);
+  }
+
+  if (!token || token === 'pk.your_token_here') {
+    showError('No Mapbox token. Add PUBLIC_MAPBOX_TOKEN to .env and restart.');
+  } else {
+    mapboxgl.accessToken = token;
+
+    const allCoords = trips.flatMap(t => t.coordinates);
+    const padding   = singleTrip
+      ? { top: 60,  bottom: 60, left: 60, right: 60 }
+      : { top: 80,  bottom: 60, left: 60, right: 60 };
+    const initBounds = allCoords.length >= 2
+      ? allCoords.reduce(
+          (b, c) => b.extend(c as [number, number]),
+          new mapboxgl.LngLatBounds(allCoords[0] as [number, number], allCoords[0] as [number, number])
+        )
+      : new mapboxgl.LngLatBounds([-120.4, 36.0], [-118.0, 38.5]);
+
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/outdoors-v12',
+      bounds: initBounds,
+      fitBoundsOptions: { padding },
+    });
+
+    map.on('error', (e) => showError(e.error?.message ?? 'Unknown map error'));
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    map.addControl(new mapboxgl.ScaleControl({ unit: 'imperial' }), 'bottom-left');
+
+    // ── Elevation profile cursor dot ───────────────────────────
+    let elevDot: mapboxgl.Marker | null = null;
+    const dotColor = trips[0]?.color ?? '#fff';
+    document.addEventListener('elev:hover', (e: Event) => {
+      const { lon, lat } = (e as CustomEvent<{lon:number;lat:number}>).detail;
+      if (elevDot) {
+        elevDot.setLngLat([lon, lat]);
+      } else {
+        const el = document.createElement('div');
+        el.className  = 'elev-map-dot';
+        el.style.cssText = `width:13px;height:13px;border-radius:50%;background:${dotColor};border:2.5px solid white;pointer-events:none;`;
+        elevDot = new mapboxgl.Marker({ element: el, anchor: 'center' }).setLngLat([lon, lat]).addTo(map);
+      }
+    });
+    document.addEventListener('elev:leave', () => { elevDot?.remove(); elevDot = null; });
+
+    // ── State that persists across style changes ────────────────
+    const cache      = new Map<string, GeoJSON.FeatureCollection>();
+    const popup      = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 12, maxWidth: '260px' });
+    let routesFitted = false;
+    let initialized  = false;
+
+    // ── addLayers — called on every style.load ─────────────────
+    async function addLayers() {
+      // 1. Terrain + hillshade
+      map.addSource('mapbox-dem', {
+        type: 'raster-dem',
+        url:  'mapbox://mapbox.mapbox-terrain-dem-v1',
+        tileSize: 512,
+        maxzoom:  14,
+      });
+      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+
+      // 2. Draw routes
+      const lineFilter: any = ['==', ['geometry-type'], 'LineString'];
+
+      for (const trip of trips) {
+        let sourceData: any;
+        if (trip.routeFile) {
+          if (isGpx(trip.routeFile)) {
+            const cached = cache.get(trip.slug);
+            if (cached) {
+              sourceData = cached;
+            } else {
+              try {
+                const gj = await loadAsGeoJSON(trip.routeFile);
+                cache.set(trip.slug, gj);
+                sourceData = gj;
+              } catch (err) {
+                console.error('[Map] GPX load failed:', err);
+                sourceData = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: trip.coordinates } };
+              }
+            }
+          } else {
+            sourceData = trip.routeFile;
+          }
+        } else {
+          sourceData = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: trip.coordinates } };
+        }
+
+        map.addSource(`trip-${trip.slug}`, { type: 'geojson', data: sourceData });
+        map.addLayer({
+          id: `trip-${trip.slug}-glow`,
+          type: 'line', source: `trip-${trip.slug}`, filter: lineFilter,
+          paint: { 'line-color': '#ffffff', 'line-width': 7, 'line-opacity': 0.5, 'line-blur': 3 },
+        });
+        map.addLayer({
+          id: `trip-${trip.slug}-line`,
+          type: 'line', source: `trip-${trip.slug}`, filter: lineFilter,
+          paint: { 'line-color': trip.color, 'line-width': singleTrip ? 4 : 3.5, 'line-opacity': 1 },
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+        });
+      }
+
+      // 3. Refit to actual route geometry (first load only)
+      if (!routesFitted) {
+        const fitBounds = new mapboxgl.LngLatBounds();
+        let hasFitData  = false;
+        for (const trip of trips) {
+          const gj = cache.get(trip.slug);
+          if (gj) {
+            gj.features
+              .filter((f: any) => f.geometry?.type === 'LineString')
+              .forEach((f: any) => {
+                (f.geometry.coordinates as number[][]).forEach(c => {
+                  fitBounds.extend([c[0], c[1]] as [number, number]);
+                  hasFitData = true;
+                });
+              });
+          }
+        }
+        if (hasFitData) {
+          map.fitBounds(fitBounds, { padding, animate: false });
+          routesFitted = true;
+        }
+      }
+
+      // 4. One-time setup: events + markers (persist across style changes)
+      if (initialized) return;
+      initialized = true;
+
+      // Multi-trip: hover + click
+      if (!singleTrip) {
+        trips.forEach((trip) => {
+          map.on('mouseenter', `trip-${trip.slug}-line`, (e) => {
+            map.getCanvas().style.cursor = 'pointer';
+            map.setPaintProperty(`trip-${trip.slug}-line`, 'line-width', 6);
+            const hoverEl = document.createElement('div');
+            hoverEl.style.fontFamily = 'Inter,system-ui,sans-serif';
+            [
+              { text: String(trip.year), css: 'font-size:11px;color:#78716c;margin-bottom:2px' },
+              { text: trip.title,        css: 'font-weight:600;font-size:13px;color:#1c1917;margin-bottom:4px' },
+              { text: `${trip.days} days · ${trip.miles} mi`, css: 'font-size:12px;color:#57534e' },
+              { text: `${trip.startPoint} → ${trip.endPoint}`, css: 'font-size:11px;color:#a8a29e;margin-top:6px' },
+              { text: 'Click to read journal →', css: 'font-size:11px;color:#16a34a;margin-top:6px;font-weight:500' },
+            ].forEach(({ text, css }) => {
+              const d = document.createElement('div');
+              d.style.cssText = css; d.textContent = text; hoverEl.appendChild(d);
+            });
+            popup.setLngLat(e.lngLat).setDOMContent(hoverEl).addTo(map);
+          });
+          map.on('mousemove',  `trip-${trip.slug}-line`, (e) => popup.setLngLat(e.lngLat));
+          map.on('mouseleave', `trip-${trip.slug}-line`, () => {
+            map.getCanvas().style.cursor = '';
+            map.setPaintProperty(`trip-${trip.slug}-line`, 'line-width', 3.5);
+            popup.remove();
+          });
+          map.on('click', `trip-${trip.slug}-line`, () => { window.location.href = `/trips/${trip.slug}`; });
+        });
+      }
+
+      // Single-trip: waypoint markers
+      if (singleTrip) {
+        const MARKER_STYLES: Record<string, { bg: string; symbol: string; category: string }> = {
+          campsite:  { bg: '#2d5016', symbol: '△', category: 'Camp' },
+          water:     { bg: '#0284c7', symbol: '≋', category: 'Water' },
+          notable:   { bg: '#c2410c', symbol: '!',  category: 'Notable' },
+          viewpoint: { bg: '#7c3aed', symbol: '◎', category: 'View' },
+          trailhead: { bg: '#374151', symbol: 'TH', category: 'Trailhead' },
+        };
+
+        function detectType(label: string): keyof typeof MARKER_STYLES {
+          const t = label.toLowerCase();
+          if (/camp|tent|night \d|bivvy|sleep/.test(t))                     return 'campsite';
+          if (/water|creek|river|lake|spring|stream|ford|crossing/.test(t)) return 'water';
+          if (/view|vista|overlook|summit|peak|pass/.test(t))               return 'viewpoint';
+          if (/trailhead|\bth\b|parking|picnic/.test(t))                    return 'trailhead';
+          return 'notable';
+        }
+
+        function placeMarker(coords: [number, number], label: string, note: string | undefined, type: keyof typeof MARKER_STYLES) {
+          const s = MARKER_STYLES[type] ?? MARKER_STYLES.notable;
+          const markerEl = document.createElement('div');
+          markerEl.style.cssText = [
+            'width:22px;height:22px;border-radius:50%;',
+            `background:${s.bg};color:#fff;`,
+            'border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;',
+            'font-size:9px;font-weight:700;font-family:Inter,sans-serif;',
+            'cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.35);user-select:none;',
+          ].join('');
+          markerEl.textContent = s.symbol;
+
+          const popupEl = document.createElement('div');
+          popupEl.style.cssText = 'font-family:Inter,system-ui,sans-serif;padding:2px 0';
+          const catEl = document.createElement('div');
+          catEl.style.cssText = 'font-size:10px;color:#78716c;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px';
+          catEl.textContent = s.category;
+          const lblEl = document.createElement('div');
+          lblEl.style.cssText = 'font-weight:600;font-size:13px;color:#1c1917';
+          lblEl.textContent = label;
+          popupEl.append(catEl, lblEl);
+          if (note) {
+            const noteEl = document.createElement('div');
+            noteEl.style.cssText = 'font-size:12px;color:#57534e;margin-top:4px;line-height:1.4';
+            noteEl.textContent = note;
+            popupEl.appendChild(noteEl);
+          }
+          new mapboxgl.Marker({ element: markerEl })
+            .setLngLat(coords)
+            .setPopup(new mapboxgl.Popup({ offset: 14, closeButton: true, maxWidth: '240px' }).setDOMContent(popupEl))
+            .addTo(map);
+        }
+
+        annotations.forEach(ann => placeMarker(ann.coordinates as [number, number], ann.label, ann.note, ann.type));
+
+        const trip = trips[0];
+        if (trip.routeFile) {
+          try {
+            const gj = cache.get(trip.slug) ?? await loadAsGeoJSON(trip.routeFile);
+            (gj.features ?? [])
+              .filter(f => f.geometry?.type === 'Point')
+              .forEach(f => {
+                const coords   = (f.geometry as GeoJSON.Point).coordinates as [number, number];
+                const label    = f.properties?.title ?? f.properties?.name ?? 'Waypoint';
+                const rawNote  = (f.properties?.description ?? f.properties?.desc ?? f.properties?.comment ?? '').trim();
+                placeMarker(coords, label, rawNote || undefined, detectType(label));
+              });
+          } catch (err) {
+            console.warn('[Map] Could not load waypoints:', err);
+          }
+        }
+      }
+    }
+
+    map.on('style.load', addLayers);
+  }
+</script>

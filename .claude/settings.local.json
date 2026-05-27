@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:claude.ai)",
+      "PowerShell(Get-Content \"C:\\\\Users\\\\johnl\\\\PCT-Project\\\\public\\\\routes\\\\KMS-Olancha.json\" | ConvertFrom-Json | Select-Object -ExpandProperty features | Where-Object { $_.geometry.type -eq \"Point\" } | ForEach-Object { $_.properties.description } | ForEach-Object { \"[$_]\" })"
+    ]
+  }
+}

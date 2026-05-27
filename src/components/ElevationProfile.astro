@@ -1,0 +1,334 @@
+---
+/**
+ * Interactive elevation profile for a trip page.
+ * - Reads route from the same GeoJSON file used by the map
+ * - If GeoJSON has 3D coordinates (Z = elevation), uses them directly
+ * - Otherwise fetches from Open-Topo-Data (free, no API key)
+ * - Broadcasts elev:hover / elev:leave events so Map.astro can show a position cursor
+ * - Draws annotation markers as dashed vertical lines on the chart
+ */
+import type { AnnotationData } from './Map.astro';
+
+interface Props {
+  routeFile: string;
+  color?: string;
+  annotations?: AnnotationData[];
+}
+
+const { routeFile, color = '#e07b39', annotations = [] } = Astro.props;
+---
+
+<div id="elev-wrap" class="bg-stone-800 border-t border-stone-700">
+  <div
+    id="elev-data"
+    data-route-file={routeFile}
+    data-color={color}
+    data-annotations={JSON.stringify(annotations)}
+    style="display:none"
+  ></div>
+
+  <div class="relative px-4 pt-4 pb-0" style="height:160px">
+    <canvas id="elev-canvas"></canvas>
+    <div id="elev-loading" class="absolute inset-0 flex items-center justify-center text-stone-500 text-sm">
+      Loading elevation…
+    </div>
+    <div id="elev-nodata" class="hidden absolute inset-0 flex items-center justify-center text-stone-600 text-sm italic">
+      Elevation data unavailable
+    </div>
+  </div>
+
+  <div class="flex items-center justify-end px-4 py-2 border-t border-stone-700/60">
+    <span id="elev-cursor" class="opacity-0 tabular-nums transition-opacity duration-100 text-xs text-stone-300"></span>
+  </div>
+</div>
+
+<!-- Pulse animation for the map cursor dot -->
+<style is:global>
+  @keyframes elev-pulse {
+    0%   { box-shadow: 0 0 0 0   rgba(255,255,255,0.7); }
+    70%  { box-shadow: 0 0 0 8px rgba(255,255,255,0);   }
+    100% { box-shadow: 0 0 0 0   rgba(255,255,255,0);   }
+  }
+  .elev-map-dot { animation: elev-pulse 1.4s ease-out infinite; }
+</style>
+
+<script>
+import Chart from 'chart.js/auto';
+import { gpx as parseGpx } from '@tmcw/togeojson';
+
+// ── Types ──────────────────────────────────────────────────────────────
+interface RoutePoint { lon: number; lat: number; distMi: number; elevFt: number; }
+interface AnnInput   { type: string; label: string; note?: string; coordinates: [number,number]; }
+
+// ── DOM refs ───────────────────────────────────────────────────────────
+const dataEl    = document.getElementById('elev-data')!    as HTMLElement;
+const canvas    = document.getElementById('elev-canvas')!  as HTMLCanvasElement;
+const loadingEl = document.getElementById('elev-loading')! as HTMLElement;
+const nodataEl  = document.getElementById('elev-nodata')!  as HTMLElement;
+const cursorEl  = document.getElementById('elev-cursor')!  as HTMLElement;
+
+const routeFile:   string       = dataEl.dataset.routeFile!;
+const color:       string       = dataEl.dataset.color!;
+const annotations: AnnInput[]   = JSON.parse(dataEl.dataset.annotations!);
+
+// ── Helpers ────────────────────────────────────────────────────────────
+function haversineMi(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3958.8;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2
+    + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function sample<T>(arr: T[], max: number): T[] {
+  if (arr.length <= max) return arr;
+  const step = Math.ceil(arr.length / max);
+  const out: T[] = [];
+  for (let i = 0; i < arr.length; i += step) out.push(arr[i]);
+  if (out[out.length-1] !== arr[arr.length-1]) out.push(arr[arr.length-1]);
+  return out;
+}
+
+function smooth(vals: number[], w = 7): number[] {
+  return vals.map((_, i) => {
+    const s = Math.max(0, i - Math.floor(w/2));
+    const e = Math.min(vals.length, s + w);
+    const sl = vals.slice(s, e);
+    return sl.reduce((a, b) => a + b, 0) / sl.length;
+  });
+}
+
+// ── Main ───────────────────────────────────────────────────────────────
+async function run() {
+  // 1. Fetch & parse (GPX or GeoJSON)
+  const isGpx = routeFile.toLowerCase().endsWith('.gpx');
+  let geojson: GeoJSON.FeatureCollection;
+  if (isGpx) {
+    const text = await fetch(routeFile).then(r => r.text());
+    const dom  = new DOMParser().parseFromString(text, 'text/xml');
+    geojson = parseGpx(dom) as GeoJSON.FeatureCollection;
+  } else {
+    geojson = await fetch(routeFile).then(r => r.json());
+  }
+  const features = geojson.type === 'FeatureCollection' ? geojson.features : [geojson];
+  // Collect ALL LineString/MultiLineString features and concatenate coordinates
+  // so multi-track GPX files (e.g. one track per day) show a complete profile
+  const lines = features.filter((f: any) =>
+    f.geometry?.type === 'LineString' || f.geometry?.type === 'MultiLineString'
+  );
+  if (!lines.length) { loadingEl.classList.add('hidden'); nodataEl.classList.remove('hidden'); return; }
+
+  let rawCoords: number[][] = lines.flatMap((f: any) =>
+    f.geometry.type === 'MultiLineString'
+      ? f.geometry.coordinates.flat()
+      : f.geometry.coordinates
+  );
+
+  // 2. Elevation — from Z coords or Open-Topo-Data
+  const has3D = rawCoords[0]?.length >= 3 && rawCoords[0][2] != null;
+  const sampledRaw = sample(rawCoords, has3D ? 800 : 80);
+  let elevFtRaw: number[];
+
+  if (has3D) {
+    elevFtRaw = sampledRaw.map(c => c[2] * 3.28084);
+  } else {
+    const locationStr = sampledRaw.map(c => `${c[1].toFixed(5)},${c[0].toFixed(5)}`).join('|');
+    const fetchElev = async (attempt = 1): Promise<number[]> => {
+      try {
+        const res = await fetch(
+          `https://api.opentopodata.org/v1/srtm90m?locations=${locationStr}`,
+          { signal: AbortSignal.timeout(10000) }
+        );
+        const json = await res.json();
+        if (json.status !== 'OK') throw new Error(json.error ?? 'API error');
+        return json.results.map((r: any) => (r.elevation ?? 0) * 3.28084);
+      } catch (err) {
+        if (attempt < 2) {
+          await new Promise(r => setTimeout(r, 2000));
+          return fetchElev(attempt + 1);
+        }
+        throw err;
+      }
+    };
+    try {
+      elevFtRaw = await fetchElev();
+    } catch (err) {
+      console.warn('[ElevationProfile] Open-Topo-Data failed after retry:', err);
+      loadingEl.classList.add('hidden');
+      nodataEl.classList.remove('hidden');
+      return;
+    }
+  }
+
+  // 3. Build route points with cumulative distance + smooth
+  let cumDist = 0;
+  const points: RoutePoint[] = sampledRaw.map((c, i) => {
+    if (i > 0) cumDist += haversineMi(sampledRaw[i-1][1], sampledRaw[i-1][0], c[1], c[0]);
+    return { lon: c[0], lat: c[1], distMi: cumDist, elevFt: elevFtRaw[i] ?? 0 };
+  });
+  const smoothed = smooth(points.map(p => p.elevFt), 3);
+  points.forEach((p, i) => p.elevFt = smoothed[i]);
+
+  // 4. Annotation positions (nearest point on route to each annotation coord)
+  //    Merge YAML annotations with waypoints extracted from GPX/GeoJSON
+  const ANN_COLORS: Record<string, string> = {
+    campsite: '#4ade80', water: '#38bdf8', notable: '#fb923c',
+    viewpoint: '#c084fc', trailhead: '#94a3b8',
+  };
+
+  function detectType(label: string): string {
+    const t = label.toLowerCase();
+    if (/camp|tent|night \d|bivvy|sleep/.test(t))                     return 'campsite';
+    if (/water|creek|river|lake|spring|stream|ford|crossing/.test(t)) return 'water';
+    if (/view|vista|overlook|summit|peak|pass/.test(t))               return 'viewpoint';
+    if (/trailhead|\bth\b|parking|picnic/.test(t))                    return 'trailhead';
+    return 'notable';
+  }
+
+  // Waypoints baked into the route file (GPX <wpt> or GeoJSON Points)
+  const waypointAnns: AnnInput[] = features
+    .filter((f: any) => f.geometry?.type === 'Point')
+    .map((f: any) => {
+      const coords = f.geometry.coordinates as [number, number];
+      const label  = f.properties?.title ?? f.properties?.name ?? 'Waypoint';
+      return { type: detectType(label), label, coordinates: coords };
+    });
+
+  const allAnnotations: AnnInput[] = [...annotations, ...waypointAnns];
+
+  const annMarkers = allAnnotations.map(ann => {
+    let minD = Infinity, minI = 0;
+    points.forEach((p, i) => {
+      const d = (p.lon - ann.coordinates[0])**2 + (p.lat - ann.coordinates[1])**2;
+      if (d < minD) { minD = d; minI = i; }
+    });
+    return { index: minI, label: ann.label, type: ann.type };
+  });
+
+  // 6. Chart
+  loadingEl.classList.add('hidden');
+  let crosshairX: number | null = null;
+
+  const overlayPlugin = {
+    id: 'overlay',
+    afterDraw(chart: Chart) {
+      const { ctx, chartArea: ca } = chart;
+      if (!ca) return;
+      ctx.save();
+      // Annotation vertical lines
+      annMarkers.forEach(ann => {
+        const pt = chart.getDatasetMeta(0).data[ann.index];
+        if (!pt) return;
+        const annColor = ANN_COLORS[ann.type] ?? ANN_COLORS.notable;
+        ctx.strokeStyle = annColor;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(pt.x, ca.top);
+        ctx.lineTo(pt.x, ca.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = annColor;
+        ctx.font = 'bold 9px Inter, system-ui, sans-serif';
+        ctx.fillText(ann.label, pt.x + 3, ca.top + 11);
+      });
+      // Hover crosshair
+      if (crosshairX !== null) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(crosshairX, ca.top);
+        ctx.lineTo(crosshairX, ca.bottom);
+        ctx.stroke();
+      }
+      ctx.restore();
+    },
+  };
+
+  const chart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: points.map((_, i) => i),
+      datasets: [{
+        data: points.map(p => Math.round(p.elevFt)),
+        borderColor: color,
+        borderWidth: 2,
+        fill: false,
+        pointRadius: 0,
+        tension: 0,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1c1917',
+          titleColor: '#a8a29e',
+          bodyColor: '#f5f5f4',
+          borderColor: '#44403c',
+          borderWidth: 1,
+          padding: 8,
+          callbacks: {
+            title: (items) => `${points[items[0].dataIndex]?.distMi.toFixed(1)} mi`,
+            label: (item) => `${Number(item.raw).toLocaleString()} ft elevation`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: '#78716c',
+            maxTicksLimit: 6,
+            callback: (_, i) => points[i] ? `${points[i].distMi.toFixed(1)}mi` : '',
+          },
+          grid: { color: '#44403c' },
+          border: { color: '#44403c' },
+        },
+        y: {
+          ticks: {
+            color: '#78716c',
+            maxTicksLimit: 5,
+            callback: (v) => `${Number(v).toLocaleString()}ft`,
+          },
+          grid: { color: '#44403c' },
+          border: { color: '#44403c' },
+        },
+      },
+      onHover: (_event, _els, chart) => {
+        const native = _event.native as MouseEvent | null;
+        if (!native || !chart.chartArea) return;
+        const ca = chart.chartArea;
+        const relX = Math.max(ca.left, Math.min(native.offsetX, ca.right));
+        const idx  = Math.round(((relX - ca.left) / ca.width) * (points.length - 1));
+        const pt   = points[Math.max(0, Math.min(idx, points.length-1))];
+        if (!pt) return;
+        crosshairX = relX;
+        chart.render();
+        cursorEl.textContent = `${pt.distMi.toFixed(1)} mi · ${Math.round(pt.elevFt).toLocaleString()} ft`;
+        cursorEl.style.opacity = '1';
+        document.dispatchEvent(new CustomEvent('elev:hover', { detail: { lon: pt.lon, lat: pt.lat } }));
+      },
+    },
+    plugins: [overlayPlugin],
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    crosshairX = null;
+    chart.render();
+    cursorEl.style.opacity = '0';
+    document.dispatchEvent(new CustomEvent('elev:leave'));
+  });
+}
+
+run().catch(err => {
+  console.error('[ElevationProfile]', err);
+  loadingEl.classList.add('hidden');
+  nodataEl.classList.remove('hidden');
+});
+</script>
