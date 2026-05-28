@@ -53,33 +53,27 @@ const totalDays = trips.reduce((sum, t) => sum + t.data.days, 0);
     <div class="absolute bottom-0 left-0 right-0 pointer-events-none">
       <div class="bg-gradient-to-t from-stone-900/80 via-stone-900/40 to-transparent pt-24 pb-8 px-6">
         <div class="max-w-6xl mx-auto">
-          <p class="text-amber-400 text-sm font-medium tracking-widest uppercase mb-2">PCT Sierra Section · Mi 702–1090</p>
           <h1 class="text-white text-4xl sm:text-5xl font-bold leading-tight mb-3" style="font-family: 'Lora', serif;">
-            Six Years in the<br />High Country
+            The PCT, One Weekend at a Time
           </h1>
           <p class="text-stone-300 text-base sm:text-lg max-w-xl mb-6">
-            Walking the Sierra from Kennedy Meadows to Echo Lake — one long weekend at a time, without pausing a career.
+            Hiking from Kennedy Meadows to Donner Pass and beyond, one weekend at a time.
           </p>
           <!-- Stats bar -->
-          <div class="flex flex-wrap gap-6 pointer-events-auto">
-            <div>
-              <div class="text-white text-2xl font-semibold">{totalMiles}</div>
-              <div class="text-stone-400 text-xs uppercase tracking-wider">Total Miles</div>
+          <div class="flex flex-wrap items-center gap-6 pointer-events-auto">
+            <div class="flex items-center gap-1.5">
+              <span class="text-white text-xl font-semibold">{totalMiles}</span>
+              <span class="text-stone-400 text-xs uppercase tracking-wider">Miles</span>
             </div>
-            <div class="w-px bg-stone-600"></div>
-            <div>
-              <div class="text-white text-2xl font-semibold">{trips.length}</div>
-              <div class="text-stone-400 text-xs uppercase tracking-wider">Trips</div>
+            <div class="w-px h-4 bg-stone-600"></div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-white text-xl font-semibold">{trips.length}</span>
+              <span class="text-stone-400 text-xs uppercase tracking-wider">Trips</span>
             </div>
-            <div class="w-px bg-stone-600"></div>
-            <div>
-              <div class="text-white text-2xl font-semibold">{totalDays}</div>
-              <div class="text-stone-400 text-xs uppercase tracking-wider">Days on Trail</div>
-            </div>
-            <div class="w-px bg-stone-600"></div>
-            <div>
-              <div class="text-white text-2xl font-semibold">6</div>
-              <div class="text-stone-400 text-xs uppercase tracking-wider">Years</div>
+            <div class="w-px h-4 bg-stone-600"></div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-white text-xl font-semibold">{totalDays}</span>
+              <span class="text-stone-400 text-xs uppercase tracking-wider">Days on Trail</span>
             </div>
           </div>
         </div>
