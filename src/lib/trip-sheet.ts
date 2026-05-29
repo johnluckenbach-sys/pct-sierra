@@ -74,9 +74,11 @@ function parseCSV(text: string): Record<string, string>[] {
 // ── Fetch + build lookup map ──────────────────────────────────────────────────
 export async function fetchTripSheet(url: string): Promise<Record<string, SheetTrip>> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { redirect: 'follow', headers: { 'Accept': 'text/csv,text/plain,*/*' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const rows = parseCSV(await res.text());
+    const text = await res.text();
+    console.log(`[TripSheet] Content-Type: ${res.headers.get('content-type')} | First 120 chars: ${text.slice(0, 120).replace(/\n/g, '\\n')}`);
+    const rows = parseCSV(text);
     const map: Record<string, SheetTrip> = {};
 
     for (const row of rows) {
