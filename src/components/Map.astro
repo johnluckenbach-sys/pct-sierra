@@ -75,7 +75,7 @@ const { trips, annotations = [], class: className = '' } = Astro.props;
   const isGpx = (url: string) => url.toLowerCase().endsWith('.gpx');
 
   async function loadAsGeoJSON(url: string): Promise<GeoJSON.FeatureCollection> {
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: 'no-cache' });
     if (isGpx(url)) {
       const text = await res.text();
       const dom  = new DOMParser().parseFromString(text, 'text/xml');
@@ -158,23 +158,26 @@ const { trips, annotations = [], class: className = '' } = Astro.props;
       // 2. Draw routes
       const lineFilter: any = ['==', ['geometry-type'], 'LineString'];
 
+      // Fetch all uncached GPX files in parallel, then add sources/layers
+      await Promise.all(
+        trips
+          .filter(trip => trip.routeFile && isGpx(trip.routeFile) && !cache.has(trip.slug))
+          .map(async (trip) => {
+            try {
+              const gj = await loadAsGeoJSON(trip.routeFile!);
+              cache.set(trip.slug, gj);
+            } catch (err) {
+              console.error('[Map] GPX load failed:', err);
+            }
+          })
+      );
+
       for (const trip of trips) {
         let sourceData: any;
         if (trip.routeFile) {
           if (isGpx(trip.routeFile)) {
-            const cached = cache.get(trip.slug);
-            if (cached) {
-              sourceData = cached;
-            } else {
-              try {
-                const gj = await loadAsGeoJSON(trip.routeFile);
-                cache.set(trip.slug, gj);
-                sourceData = gj;
-              } catch (err) {
-                console.error('[Map] GPX load failed:', err);
-                sourceData = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: trip.coordinates } };
-              }
-            }
+            sourceData = cache.get(trip.slug)
+              ?? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: trip.coordinates } };
           } else {
             sourceData = trip.routeFile;
           }
