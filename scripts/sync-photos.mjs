@@ -1,0 +1,159 @@
+/**
+ * Syncs Cloudinary photo IDs into MDX frontmatter.
+ *
+ * - Fetches all images under trips/ from Cloudinary
+ * - Groups them by trip slug (subfolder name)
+ * - Updates each matching MDX file's photos: array
+ * - Preserves existing alt/caption values you've already written
+ * - Adds new photos (no alt/caption — fill those in manually)
+ *
+ * Usage:
+ *   CLOUDINARY_API_KEY=xxx CLOUDINARY_API_SECRET=yyy node scripts/sync-photos.mjs
+ *
+ * Or add to .env.local:
+ *   CLOUDINARY_API_KEY=545522749547794
+ *   CLOUDINARY_API_SECRET=your_rotated_secret
+ */
+
+import { readFileSync, writeFileSync, readdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dir      = dirname(fileURLToPath(import.meta.url));
+const TRIPS_DIR  = join(__dir, '../src/content/trips');
+const CLOUD_NAME = 'dmpvggpzz';
+
+// ── Load credentials ──────────────────────────────────────────────────────────
+const API_KEY    = process.env.CLOUDINARY_API_KEY;
+const API_SECRET = process.env.CLOUDINARY_API_SECRET;
+
+if (!API_KEY || !API_SECRET) {
+  console.error('Set CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET env vars.');
+  process.exit(1);
+}
+
+// ── Fetch all images under trips/ ─────────────────────────────────────────────
+async function fetchCloudinaryPhotos() {
+  const auth    = Buffer.from(`${API_KEY}:${API_SECRET}`).toString('base64');
+  const url     = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/resources/image?prefix=trips/&max_results=500&type=upload`;
+  const res     = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
+  if (!res.ok) throw new Error(`Cloudinary API error: ${res.status} ${await res.text()}`);
+  const data    = await res.json();
+  return data.resources.map(r => r.public_id); // e.g. "trips/desolation-loop/day1"
+}
+
+// ── Group photo IDs by trip slug ──────────────────────────────────────────────
+function groupBySlug(publicIds) {
+  const map = {};
+  for (const id of publicIds) {
+    const parts = id.split('/'); // ["trips", "desolation-loop", "day1"]
+    if (parts.length < 3) continue;
+    const slug = parts[1];
+    if (!map[slug]) map[slug] = [];
+    map[slug].push(id);
+  }
+  return map;
+}
+
+// ── Parse existing photos: block from frontmatter ─────────────────────────────
+// Returns array of { id, alt, caption } objects
+function parseExistingPhotos(frontmatter) {
+  const match = frontmatter.match(/^photos:\s*\n((?:[ \t]+-[^\n]*\n(?:[ \t]+[^\n]+\n)*)*)/m);
+  if (!match) return [];
+
+  const photos = [];
+  const block  = match[1];
+  const items  = block.split(/(?=[ \t]+-\s)/);
+
+  for (const item of items) {
+    const idMatch      = item.match(/id:\s*(.+)/);
+    const altMatch     = item.match(/alt:\s*(.+)/);
+    const captionMatch = item.match(/caption:\s*(.+)/);
+    if (idMatch) {
+      photos.push({
+        id:      idMatch[1].trim(),
+        alt:     altMatch     ? altMatch[1].trim()     : undefined,
+        caption: captionMatch ? captionMatch[1].trim() : undefined,
+      });
+    }
+  }
+  return photos;
+}
+
+// ── Build a photos: YAML block ────────────────────────────────────────────────
+function buildPhotosYaml(photos) {
+  if (!photos.length) return '';
+  const lines = ['photos:'];
+  for (const p of photos) {
+    lines.push(`  - id: ${p.id}`);
+    if (p.alt)     lines.push(`    alt: ${p.alt}`);
+    if (p.caption) lines.push(`    caption: ${p.caption}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+// ── Merge: keep existing alt/caption, append new IDs ─────────────────────────
+function mergePhotos(existing, incoming) {
+  const byId = Object.fromEntries(existing.map(p => [p.id, p]));
+  const result = [];
+
+  // Keep existing order first, preserving alt/caption
+  for (const id of incoming) {
+    result.push(byId[id] ?? { id });
+  }
+
+  // Keep any manually added entries not in Cloudinary
+  for (const p of existing) {
+    if (!incoming.includes(p.id)) result.push(p);
+  }
+
+  return result;
+}
+
+// ── Update a single MDX file ──────────────────────────────────────────────────
+function updateMdx(filePath, incomingIds) {
+  const content = readFileSync(filePath, 'utf-8');
+  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!fmMatch) return;
+
+  const frontmatter  = fmMatch[1];
+  const existing     = parseExistingPhotos(frontmatter);
+  const merged       = mergePhotos(existing, incomingIds);
+  const photosBlock  = buildPhotosYaml(merged);
+
+  // Replace existing photos: block or append before closing ---
+  let newFrontmatter;
+  if (/^photos:/m.test(frontmatter)) {
+    newFrontmatter = frontmatter.replace(
+      /^photos:\s*\n((?:[ \t]+-[^\n]*\n(?:[ \t]+[^\n]+\n)*)*)/m,
+      photosBlock
+    );
+  } else {
+    newFrontmatter = frontmatter.trimEnd() + '\n' + photosBlock;
+  }
+
+  const updated = content.replace(fmMatch[1], newFrontmatter);
+  writeFileSync(filePath, updated, 'utf-8');
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+console.log('Fetching photos from Cloudinary...');
+const allIds    = await fetchCloudinaryPhotos();
+console.log(`Found ${allIds.length} photos`);
+
+const bySlug    = groupBySlug(allIds);
+const mdxFiles  = readdirSync(TRIPS_DIR).filter(f => f.endsWith('.mdx'));
+let updated     = 0;
+
+for (const file of mdxFiles) {
+  const slug = file.replace('.mdx', '');
+  const ids  = bySlug[slug];
+  if (!ids?.length) continue;
+
+  updateMdx(join(TRIPS_DIR, file), ids);
+  console.log(`  ✓ ${slug} — ${ids.length} photo(s)`);
+  updated++;
+}
+
+console.log(`\nDone. Updated ${updated} trip file(s).`);
+console.log('Review changes, fill in alt/caption where needed, then commit.');
