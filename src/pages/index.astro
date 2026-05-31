@@ -13,10 +13,8 @@ const trips     = allTrips
   .map(t => ({ ...t, data: mergeSheetData(t.data, sheet[t.id]) }))
   .sort((a, b) => a.data.year - b.data.year);
 
-// Assign a 4-color palette sorted south→north so adjacent routes
-// never share a similar color. Trips with unknown PCT miles go last.
-// 3 colors: terra cotta · alpine blue · trail amber
-// Cycling 3 through geo-sorted routes ensures no two adjacent routes share a color
+// Greedy graph coloring: assign colors south→north so no two touching routes share a color.
+// Routes are "adjacent" if their PCT mile ranges are within 5 miles of each other.
 const MAP_PALETTE = ['#e05525', '#1a7fa5', '#c4902a'];
 const geoSorted = [...trips].sort((a, b) => {
   const aM = a.data.pctMileStart || Infinity;
@@ -24,7 +22,20 @@ const geoSorted = [...trips].sort((a, b) => {
   return aM - bM;
 });
 const paletteColor: Record<string, string> = {};
-geoSorted.forEach((t, i) => { paletteColor[t.id] = MAP_PALETTE[i % MAP_PALETTE.length]; });
+for (const trip of geoSorted) {
+  const s = trip.data.pctMileStart ?? 0;
+  const e = trip.data.pctMileEnd ?? 0;
+  const usedColors = new Set<string>();
+  for (const [otherId, color] of Object.entries(paletteColor)) {
+    const other = geoSorted.find(t => t.id === otherId)!;
+    const os = other.data.pctMileStart ?? 0;
+    const oe = other.data.pctMileEnd ?? 0;
+    if (s > 0 && e > 0 && os > 0 && oe > 0 && s <= oe + 5 && os <= e + 5) {
+      usedColors.add(color);
+    }
+  }
+  paletteColor[trip.id] = MAP_PALETTE.find(c => !usedColors.has(c)) ?? MAP_PALETTE[0];
+}
 
 const mapTrips = trips.map(t => ({
   slug: t.id,
