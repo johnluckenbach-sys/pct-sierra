@@ -18,7 +18,7 @@ const trips     = allTrips
 // 3 colors: terra cotta · alpine blue · trail amber
 // Cycling 3 through geo-sorted routes ensures no two adjacent routes share a color
 const MAP_PALETTE = ['#e05525', '#1a7fa5', '#c4902a'];
-const geoSorted = [...allTrips].sort((a, b) => {
+const geoSorted = [...trips].sort((a, b) => {
   const aM = a.data.pctMileStart || Infinity;
   const bM = b.data.pctMileStart || Infinity;
   return aM - bM;
