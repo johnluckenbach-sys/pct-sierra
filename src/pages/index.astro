@@ -39,7 +39,8 @@ const mapTrips = trips.map(t => ({
 }));
 
 const totalMiles = trips.reduce((sum, t) => sum + t.data.miles, 0);
-const totalDays = trips.reduce((sum, t) => sum + t.data.days, 0);
+const totalDays  = trips.reduce((sum, t) => sum + t.data.days, 0);
+const totalGain  = trips.reduce((sum, t) => sum + (t.data.elevationGain ?? 0), 0);
 ---
 
 <Layout>
@@ -75,6 +76,15 @@ const totalDays = trips.reduce((sum, t) => sum + t.data.days, 0);
               <span class="text-white text-xl font-semibold">{totalDays}</span>
               <span class="text-stone-400 text-xs uppercase tracking-wider">Days on Trail</span>
             </div>
+            {totalGain > 0 && (
+              <>
+                <div class="w-px h-4 bg-stone-600"></div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-white text-xl font-semibold">{totalGain.toLocaleString()}</span>
+                  <span class="text-stone-400 text-xs uppercase tracking-wider">Ft Gained</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
