@@ -71,55 +71,57 @@ function parseCSV(text: string): Record<string, string>[] {
     });
 }
 
-// ── Fetch + build lookup map ──────────────────────────────────────────────────
+// ── Parse CSV text into a slug-keyed lookup map ───────────────────────────────
+export function parseTripSheet(text: string): Record<string, SheetTrip> {
+  const rows = parseCSV(text);
+  const map: Record<string, SheetTrip> = {};
+
+  for (const row of rows) {
+    const slug = row['slug'];
+    if (!slug) continue;
+
+    const trip: SheetTrip = { slug };
+
+    const str  = (key: string) => row[key] || undefined;
+    const int  = (key: string) => row[key] ? parseInt(row[key],  10) || undefined : undefined;
+    const flt  = (key: string) => row[key] ? parseFloat(row[key])   || undefined : undefined;
+    const tags = (key: string) => row[key]
+      ? row[key].split(',').map(t => t.trim()).filter(Boolean)
+      : undefined;
+
+    trip.title         = str('title');
+    trip.year          = int('year');
+    trip.startDate     = str('startdate')  ?? str('startDate');
+    trip.endDate       = str('enddate')    ?? str('endDate');
+    trip.days          = int('days');
+    trip.miles         = flt('miles');
+    trip.elevationGain = int('elevationgain') ?? int('elevationGain');
+    trip.startPoint    = str('startpoint') ?? str('startPoint');
+    trip.endPoint      = str('endpoint')   ?? str('endPoint');
+    trip.pctMileStart  = int('pctmilestart') ?? int('pctMileStart');
+    trip.pctMileEnd    = int('pctmileend')   ?? int('pctMileEnd');
+    trip.description   = str('description');
+    trip.tags          = tags('tags');
+
+    // Strip undefined keys so spread merge works cleanly
+    (Object.keys(trip) as (keyof SheetTrip)[]).forEach(k => {
+      if (trip[k] === undefined) delete trip[k];
+    });
+
+    map[slug] = trip;
+  }
+
+  return map;
+}
+
+// ── Legacy URL-based fetch (kept for reference) ───────────────────────────────
 export async function fetchTripSheet(url: string): Promise<Record<string, SheetTrip>> {
   try {
-    const res = await fetch(url, { redirect: 'follow', headers: { 'Accept': 'text/csv,text/plain,*/*' } });
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    console.log(`[TripSheet] Content-Type: ${res.headers.get('content-type')} | First 120 chars: ${text.slice(0, 120).replace(/\n/g, '\\n')}`);
-    const rows = parseCSV(text);
-    const map: Record<string, SheetTrip> = {};
-
-    for (const row of rows) {
-      const slug = row['slug'];
-      if (!slug) continue;
-
-      const trip: SheetTrip = { slug };
-
-      const str  = (key: string) => row[key] || undefined;
-      const int  = (key: string) => row[key] ? parseInt(row[key],  10) || undefined : undefined;
-      const flt  = (key: string) => row[key] ? parseFloat(row[key])   || undefined : undefined;
-      const tags = (key: string) => row[key]
-        ? row[key].split(',').map(t => t.trim()).filter(Boolean)
-        : undefined;
-
-      trip.title         = str('title');
-      trip.year          = int('year');
-      trip.startDate     = str('startdate')  ?? str('startDate');
-      trip.endDate       = str('enddate')    ?? str('endDate');
-      trip.days          = int('days');
-      trip.miles         = flt('miles');
-      trip.elevationGain = int('elevationgain') ?? int('elevationGain');
-      trip.startPoint    = str('startpoint') ?? str('startPoint');
-      trip.endPoint      = str('endpoint')   ?? str('endPoint');
-      trip.pctMileStart  = int('pctmilestart') ?? int('pctMileStart');
-      trip.pctMileEnd    = int('pctmileend')   ?? int('pctMileEnd');
-      trip.description   = str('description');
-      trip.tags          = tags('tags');
-
-      // Strip undefined keys so spread merge works cleanly
-      (Object.keys(trip) as (keyof SheetTrip)[]).forEach(k => {
-        if (trip[k] === undefined) delete trip[k];
-      });
-
-      map[slug] = trip;
-    }
-
-    console.log(`[TripSheet] Loaded ${Object.keys(map).length} rows`);
-    return map;
+    return parseTripSheet(await res.text());
   } catch (err) {
-    console.warn('[TripSheet] Could not fetch sheet — using MDX values only:', err);
+    console.warn('[TripSheet] Could not fetch sheet — using local CSV only:', err);
     return {};
   }
 }

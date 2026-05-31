@@ -4,10 +4,10 @@ import Layout from '../../layouts/Layout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import TripCard from '../../components/TripCard.astro';
-import { fetchTripSheet, mergeSheetData } from '../../lib/trip-sheet';
+import { parseTripSheet, mergeSheetData } from '../../lib/trip-sheet';
+import tripsCSV from '../../data/trips.csv?raw';
 
-const sheetUrl = import.meta.env.SHEET_CSV_URL;
-const sheet    = sheetUrl ? await fetchTripSheet(sheetUrl) : {};
+const sheet = parseTripSheet(tripsCSV);
 
 const allTrips = await getCollection('trips');
 const trips = allTrips
