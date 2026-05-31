@@ -29,6 +29,12 @@ interface Props {
 const { trips, annotations = [], class: className = '' } = Astro.props;
 ---
 
+<style is:global>
+  /* Push controls below the fixed header on every page */
+  .mapboxgl-ctrl-top-right { margin-top: 64px !important; }
+  .mapboxgl-ctrl-top-left  { margin-top: 64px !important; }
+</style>
+
 <div class={className || 'relative w-full h-full'}>
   <div id="map-data"
     data-trips={JSON.stringify(trips)}
@@ -101,14 +107,14 @@ const { trips, annotations = [], class: className = '' } = Astro.props;
 
     const allCoords = trips.flatMap(t => t.coordinates);
     const padding   = singleTrip
-      ? { top: 60,  bottom: 60, left: 60, right: 60 }
-      : { top: 80,  bottom: 60, left: 60, right: 60 };
+      ? { top: 80,  bottom: 80,  left: 60, right: 60 }
+      : { top: 130, bottom: 260, left: 60, right: 60 };
     const initBounds = singleTrip && allCoords.length >= 2
       ? allCoords.reduce(
           (b, c) => b.extend(c as [number, number]),
           new mapboxgl.LngLatBounds(allCoords[0] as [number, number], allCoords[0] as [number, number])
         )
-      : new mapboxgl.LngLatBounds([-120.5, 35.8], [-117.8, 39.2]);
+      : new mapboxgl.LngLatBounds([-120.6, 35.7], [-118.0, 39.6]);
 
     const map = new mapboxgl.Map({
       container: 'map',

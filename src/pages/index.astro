@@ -106,4 +106,7 @@ const totalGain  = trips.reduce((sum, t) => sum + (t.data.elevationGain ?? 0), 0
     overflow: hidden;
     height: 100%;
   }
+  /* Push scale control above the fixed bottom nav on homepage */
+  .mapboxgl-ctrl-bottom-left  { margin-bottom: 64px !important; }
+  .mapboxgl-ctrl-bottom-right { margin-bottom: 64px !important; }
 </style>
