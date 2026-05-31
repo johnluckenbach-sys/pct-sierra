@@ -1,0 +1,126 @@
+---
+import { cdnThumb, cdnFull } from '../lib/cloudinary';
+
+interface Photo {
+  id: string;
+  alt?: string;
+  caption?: string;
+}
+
+interface Props {
+  photos: Photo[];
+}
+
+const { photos } = Astro.props;
+if (!photos?.length) return;
+---
+
+<section class="mt-12 pt-10 border-t border-stone-200">
+  <h2 class="text-lg font-semibold text-stone-800 mb-6" style="font-family: 'Lora', serif;">
+    Photos <span class="text-stone-400 font-normal text-sm">({photos.length})</span>
+  </h2>
+
+  <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+    {photos.map((photo, i) => (
+      <button
+        class="gallery-item group relative overflow-hidden rounded-lg aspect-[4/3] bg-stone-100 cursor-zoom-in"
+        data-index={String(i)}
+        data-src={cdnFull(photo.id)}
+        data-alt={photo.alt ?? ''}
+        data-caption={photo.caption ?? ''}
+      >
+        <img
+          src={cdnThumb(photo.id, 600)}
+          alt={photo.alt ?? ''}
+          loading="lazy"
+          decoding="async"
+          class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+        />
+        {photo.caption && (
+          <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+            <p class="text-white text-xs leading-snug">{photo.caption}</p>
+          </div>
+        )}
+      </button>
+    ))}
+  </div>
+</section>
+
+<!-- Lightbox -->
+<div
+  id="lightbox"
+  class="fixed inset-0 z-[200] bg-black/95 hidden items-center justify-center"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Photo lightbox"
+>
+  <!-- Close -->
+  <button id="lb-close" aria-label="Close" class="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M18 6L6 18M6 6l12 12"/>
+    </svg>
+  </button>
+
+  <!-- Prev -->
+  <button id="lb-prev" aria-label="Previous photo" class="absolute left-3 sm:left-6 text-white/70 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </button>
+
+  <!-- Image + caption -->
+  <div class="flex flex-col items-center gap-3 mx-16 sm:mx-20 max-w-5xl w-full">
+    <img id="lb-img" src="" alt="" class="max-h-[80vh] max-w-full object-contain rounded-lg" />
+    <div class="flex items-center gap-3">
+      <p id="lb-caption" class="text-white/70 text-sm text-center"></p>
+      <span id="lb-counter" class="text-white/40 text-xs shrink-0"></span>
+    </div>
+  </div>
+
+  <!-- Next -->
+  <button id="lb-next" aria-label="Next photo" class="absolute right-3 sm:right-6 text-white/70 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M9 18l6-6-6-6"/>
+    </svg>
+  </button>
+</div>
+
+<script>
+  const items  = [...document.querySelectorAll<HTMLButtonElement>('.gallery-item')];
+  const box    = document.getElementById('lightbox')!;
+  const lbImg  = document.getElementById('lb-img') as HTMLImageElement;
+  const lbCap  = document.getElementById('lb-caption')!;
+  const lbCtr  = document.getElementById('lb-counter')!;
+  let current  = 0;
+
+  function show(i: number) {
+    current = (i + items.length) % items.length;
+    const el = items[current];
+    lbImg.src = el.dataset.src!;
+    lbImg.alt = el.dataset.alt ?? '';
+    lbCap.textContent = el.dataset.caption ?? '';
+    lbCtr.textContent = `${current + 1} / ${items.length}`;
+    box.classList.remove('hidden');
+    box.classList.add('flex');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function close() {
+    box.classList.add('hidden');
+    box.classList.remove('flex');
+    document.body.style.overflow = '';
+  }
+
+  items.forEach((el, i) => el.addEventListener('click', () => show(i)));
+  document.getElementById('lb-close')!.addEventListener('click', close);
+  document.getElementById('lb-prev')!.addEventListener('click', () => show(current - 1));
+  document.getElementById('lb-next')!.addEventListener('click', () => show(current + 1));
+  box.addEventListener('click', e => { if (e.target === box) close(); });
+
+  document.addEventListener('keydown', e => {
+    if (box.classList.contains('hidden')) return;
+    if (e.key === 'Escape')      close();
+    if (e.key === 'ArrowLeft')   show(current - 1);
+    if (e.key === 'ArrowRight')  show(current + 1);
+  });
+</script>

@@ -1,17 +1,11 @@
 ---
-/**
- * Responsive photo grid for embedding in MDX journals.
- *
- * Usage in .mdx:
- *   import PhotoGrid from '../../components/mdx/PhotoGrid.astro';
- *   <PhotoGrid photos={[
- *     { src: '/images/trips/2019/chicken-spring-lake.jpg', alt: 'Chicken Spring Lake at golden hour' },
- *     { src: '/images/trips/2019/camp.jpg', alt: 'Camp below the pass' },
- *   ]} caption="Day 1 — Chicken Spring Lake" />
- */
+import { cdnThumb, cdnFull } from '../../lib/cloudinary';
+
 interface Photo {
-  src: string;
-  alt: string;
+  src?: string;   // full URL (local or external)
+  id?: string;    // Cloudinary public ID  e.g. "trips/desolation-loop/day1"
+  alt?: string;
+  caption?: string;
 }
 
 interface Props {
@@ -21,20 +15,39 @@ interface Props {
 }
 
 const { photos, caption, cols = 2 } = Astro.props;
-const gridClass = cols === 3 ? 'grid-cols-3' : 'grid-cols-2';
+const gridClass = cols === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2';
+
+function thumbSrc(p: Photo) {
+  return p.id ? cdnThumb(p.id, 800) : p.src!;
+}
+function fullSrc(p: Photo) {
+  return p.id ? cdnFull(p.id) : p.src!;
+}
 ---
 
 <figure class="my-8 not-prose">
-  <div class={`grid ${gridClass} gap-2`}>
-    {photos.map(photo => (
-      <div class="overflow-hidden rounded-lg aspect-[4/3] bg-stone-100">
+  <div class={`grid grid-cols-1 ${gridClass} gap-2`}>
+    {photos.map((photo, i) => (
+      <button
+        class="gallery-item group relative overflow-hidden rounded-lg aspect-[4/3] bg-stone-100 cursor-zoom-in"
+        data-index={String(i)}
+        data-src={fullSrc(photo)}
+        data-alt={photo.alt ?? ''}
+        data-caption={photo.caption ?? ''}
+      >
         <img
-          src={photo.src}
-          alt={photo.alt}
+          src={thumbSrc(photo)}
+          alt={photo.alt ?? ''}
           loading="lazy"
+          decoding="async"
           class="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
         />
-      </div>
+        {photo.caption && (
+          <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+            <p class="text-white text-xs">{photo.caption}</p>
+          </div>
+        )}
+      </button>
     ))}
   </div>
   {caption && (

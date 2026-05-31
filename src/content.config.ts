@@ -28,6 +28,11 @@ const trips = defineCollection({
       note: z.string().optional(),
       coordinates: z.tuple([z.number(), z.number()]),
     })).optional(),
+    photos: z.array(z.object({
+      id: z.string(),
+      alt: z.string().optional(),
+      caption: z.string().optional(),
+    })).optional(),
   }),
 });
 

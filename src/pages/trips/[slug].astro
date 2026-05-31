@@ -5,6 +5,7 @@ import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import Map from '../../components/Map.astro';
 import ElevationProfile from '../../components/ElevationProfile.astro';
+import TripGallery from '../../components/TripGallery.astro';
 import { parseTripSheet, mergeSheetData } from '../../lib/trip-sheet';
 import tripsCSV from '../../data/trips.csv?raw';
 
@@ -159,6 +160,10 @@ const nextTrip = currentIndex < sorted.length - 1 ? sorted[currentIndex + 1] : n
             prose-a:text-forest-600 prose-a:no-underline hover:prose-a:underline">
             <Content />
           </div>
+
+          {d.photos && d.photos.length > 0 && (
+            <TripGallery photos={d.photos} />
+          )}
         </article>
       </div>
 
