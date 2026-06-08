@@ -14,6 +14,12 @@ const trips = allTrips
   .map(t => ({ ...t, data: mergeSheetData(t.data, sheet[t.id]) }))
   .sort((a, b) => a.data.year - b.data.year);
 
+function tripTypeColor(days: number): string {
+  if (days === 1) return '#f59e0b';  // amber  — day hike
+  if (days === 2) return '#0ea5e9';  // sky    — overnighter
+  return '#7c3aed';                  // violet — multi-night
+}
+
 const totalMiles = trips.reduce((sum, t) => sum + t.data.miles, 0);
 const totalDays = trips.reduce((sum, t) => sum + t.data.days, 0);
 const totalGain = trips.reduce((sum, t) => sum + (t.data.elevationGain ?? 0), 0);
@@ -51,25 +57,89 @@ const totalGain = trips.reduce((sum, t) => sum + (t.data.elevationGain ?? 0), 0)
         </div>
       </div>
 
+      <!-- Sort controls -->
+      <div class="flex items-center gap-3 mb-6">
+        <span class="text-xs uppercase tracking-wider text-stone-400 shrink-0">Sort by</span>
+        <div class="flex flex-wrap gap-2">
+          {[
+            { value: 'date-asc',  label: 'Date ↑' },
+            { value: 'date-desc', label: 'Date ↓' },
+            { value: 'miles-asc',  label: 'Miles ↑' },
+            { value: 'miles-desc', label: 'Miles ↓' },
+            { value: 'days-asc',   label: 'Days ↑' },
+            { value: 'days-desc',  label: 'Days ↓' },
+          ].map(opt => (
+            <button
+              data-sort={opt.value}
+              class="sort-btn text-xs px-3 py-1.5 rounded-full border border-stone-200 text-stone-500 hover:border-amber-400 hover:text-amber-600 transition-colors duration-150"
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <!-- Trip grid -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div id="trip-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {trips.map(trip => (
-          <TripCard
-            slug={trip.id}
-            title={trip.data.title}
-            year={trip.data.year}
-            days={trip.data.days}
-            miles={trip.data.miles}
-            startPoint={trip.data.startPoint}
-            endPoint={trip.data.endPoint}
-            pctMileStart={trip.data.pctMileStart}
-            pctMileEnd={trip.data.pctMileEnd}
-            description={trip.data.description}
-            color={trip.data.color}
-            tags={trip.data.tags}
-          />
+          <div
+            data-miles={trip.data.miles}
+            data-days={trip.data.days}
+            data-year={trip.data.year}
+          >
+            <TripCard
+              slug={trip.id}
+              title={trip.data.title}
+              year={trip.data.year}
+              days={trip.data.days}
+              miles={trip.data.miles}
+              startPoint={trip.data.startPoint}
+              endPoint={trip.data.endPoint}
+              pctMileStart={trip.data.pctMileStart}
+              pctMileEnd={trip.data.pctMileEnd}
+              description={trip.data.description}
+              color={tripTypeColor(trip.data.days)}
+              tags={trip.data.tags}
+            />
+          </div>
         ))}
       </div>
+
+      <script>
+        const grid = document.getElementById('trip-grid');
+        const buttons = document.querySelectorAll<HTMLButtonElement>('.sort-btn');
+
+        function applySort(value: string) {
+          const cards = Array.from(grid!.children) as HTMLElement[];
+          const rawKey = value.replace(/-(?:asc|desc)$/, '');
+          const key = rawKey === 'date' ? 'year' : rawKey as 'miles' | 'days';
+          const asc = value.endsWith('-asc');
+
+          cards.sort((a, b) => {
+            const av = Number(a.dataset[key]);
+            const bv = Number(b.dataset[key]);
+            return asc ? av - bv : bv - av;
+          });
+
+          cards.forEach(c => grid!.appendChild(c));
+
+          buttons.forEach(btn => {
+            const active = btn.dataset.sort === value;
+            btn.classList.toggle('bg-amber-50', active);
+            btn.classList.toggle('border-amber-400', active);
+            btn.classList.toggle('text-amber-600', active);
+            btn.classList.toggle('border-stone-200', !active);
+            btn.classList.toggle('text-stone-500', !active);
+          });
+        }
+
+        // default: date ascending (matches server render order)
+        applySort('date-asc');
+
+        buttons.forEach(btn => {
+          btn.addEventListener('click', () => applySort(btn.dataset.sort!));
+        });
+      </script>
     </div>
   </main>
 
