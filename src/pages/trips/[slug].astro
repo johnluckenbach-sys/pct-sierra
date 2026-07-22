@@ -20,6 +20,20 @@ const { Content } = await render(trip);
 const sheet = parseTripSheet(tripsCSV);
 const d     = mergeSheetData(trip.data, sheet[trip.id]);
 
+function formatMDY(value: string): string {
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, yyyy, mm, dd] = isoMatch;
+    return `${mm}/${dd}/${yyyy}`;
+  }
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return value;
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${mm}/${dd}/${yyyy}`;
+}
+
 // Single trip for the map — individual pages show only their own route
 const mapTrips = [{
   slug: trip.id,
@@ -112,7 +126,7 @@ const nextTrip = currentIndex < sorted.length - 1 ? sorted[currentIndex + 1] : n
                 </div>
                 <div class="flex justify-between text-sm">
                   <dt class="text-stone-400">Dates</dt>
-                  <dd class="font-medium text-stone-700">{d.startDate} → {d.endDate}</dd>
+                  <dd class="font-medium text-stone-700">{formatMDY(d.startDate)} → {formatMDY(d.endDate)}</dd>
                 </div>
               </dl>
             </div>

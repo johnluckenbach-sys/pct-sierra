@@ -62,7 +62,11 @@ function sheetToCsv() {
   const data  = sheet.getDataRange().getValues();
   return data.map(row =>
     row.map(cell => {
-      const val = String(cell ?? '');
+      // Dates come back from getValues() as JS Date objects — format as
+      // yyyy-MM-dd instead of the default verbose toString().
+      const val = cell instanceof Date
+        ? Utilities.formatDate(cell, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+        : String(cell ?? '');
       // Wrap in quotes if value contains comma, newline, or quote
       return val.includes(',') || val.includes('\n') || val.includes('"')
         ? `"${val.replace(/"/g, '""')}"` : val;

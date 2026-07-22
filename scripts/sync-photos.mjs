@@ -1,8 +1,10 @@
 /**
  * Syncs Cloudinary photo IDs into MDX frontmatter.
  *
- * - Fetches all images under trips/ from Cloudinary
- * - Groups them by trip slug (subfolder name)
+ * - Fetches all images under the trips/ asset folder from Cloudinary
+ *   (via the Search API, matched against asset_folder — this account
+ *   uses Dynamic Folders, so folder path is not part of the public_id)
+ * - Groups them by trip slug (asset_folder subfolder name)
  * - Updates each matching MDX file's photos: array
  * - Preserves existing alt/caption values you've already written
  * - Adds new photos (no alt/caption — fill those in manually)
@@ -11,8 +13,8 @@
  *   CLOUDINARY_API_KEY=xxx CLOUDINARY_API_SECRET=yyy node scripts/sync-photos.mjs
  *
  * Or add to .env.local:
- *   CLOUDINARY_API_KEY=545522749547794
- *   CLOUDINARY_API_SECRET=your_rotated_secret
+ *   CLOUDINARY_API_KEY=xxx
+ *   CLOUDINARY_API_SECRET=xxx
  */
 
 import { readFileSync, writeFileSync, readdirSync } from 'fs';
@@ -32,23 +34,44 @@ if (!API_KEY || !API_SECRET) {
   process.exit(1);
 }
 
-// ── Fetch all images under trips/ ─────────────────────────────────────────────
+// ── Fetch all images under the trips/ asset folder ────────────────────────────
+// Uses the Search API (not the older prefix-based resources list) because this
+// account uses Dynamic Folders — folder path lives in `asset_folder`, not baked
+// into `public_id` (public_id is just e.g. "IMG_6722_g94qhw").
 async function fetchCloudinaryPhotos() {
-  const auth    = Buffer.from(`${API_KEY}:${API_SECRET}`).toString('base64');
-  const url     = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/resources/image?prefix=trips/&max_results=500&type=upload`;
-  const res     = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
-  if (!res.ok) throw new Error(`Cloudinary API error: ${res.status} ${await res.text()}`);
-  const data    = await res.json();
-  return data.resources.map(r => r.public_id); // e.g. "trips/desolation-loop/day1"
+  const auth = Buffer.from(`${API_KEY}:${API_SECRET}`).toString('base64');
+  const resources = [];
+  let next_cursor;
+
+  do {
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/resources/search`, {
+      method: 'POST',
+      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expression: 'asset_folder:trips/*',
+        max_results: 500,
+        sort_by: [{ public_id: 'asc' }],
+        ...(next_cursor ? { next_cursor } : {}),
+      }),
+    });
+    if (!res.ok) throw new Error(`Cloudinary API error: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    resources.push(...data.resources);
+    next_cursor = data.next_cursor;
+  } while (next_cursor);
+
+  // e.g. { id: "IMG_6722_g94qhw", folder: "Trips/desolation-loop" }
+  return resources.map(r => ({ id: r.public_id, folder: r.asset_folder }));
 }
 
 // ── Group photo IDs by trip slug ──────────────────────────────────────────────
-function groupBySlug(publicIds) {
+function groupBySlug(photos) {
   const map = {};
-  for (const id of publicIds) {
-    const parts = id.split('/'); // ["trips", "desolation-loop", "day1"]
-    if (parts.length < 3) continue;
-    const slug = parts[1];
+  for (const { id, folder } of photos) {
+    if (!folder) continue;
+    const parts = folder.split('/'); // ["Trips", "desolation-loop"]
+    if (parts.length < 2) continue;
+    const slug = parts[1].toLowerCase();
     if (!map[slug]) map[slug] = [];
     map[slug].push(id);
   }
