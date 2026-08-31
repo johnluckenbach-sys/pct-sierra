@@ -1,0 +1,88 @@
+---
+interface Props {
+  id: string;
+}
+
+const { id } = Astro.props;
+const currentPath = Astro.url.pathname;
+const isActive = currentPath === '/' || currentPath.startsWith('/map/');
+
+const items = [
+  { href: '/map/pct', label: 'PCT' },
+  { href: '/map/jmt', label: 'JMT' },
+  { href: '/map/other', label: 'Other' },
+  { href: '/', label: 'All Hikes' },
+];
+---
+
+<div class="relative" data-map-dropdown={id}>
+  <button
+    type="button"
+    data-map-dropdown-trigger={id}
+    aria-haspopup="true"
+    aria-expanded="false"
+    class={`px-3 py-1.5 rounded text-sm transition-colors flex items-center gap-1 ${
+      isActive ? 'text-amber-400 bg-stone-800' : 'text-stone-300 hover:text-white hover:bg-stone-800'
+    }`}
+  >
+    Map
+    <svg data-map-dropdown-caret={id} width="10" height="10" viewBox="0 0 10 10" fill="none" class="transition-transform">
+      <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </button>
+
+  <div
+    data-map-dropdown-panel={id}
+    class="hidden absolute left-0 top-full mt-1 min-w-[9rem] rounded-md bg-stone-800 border border-stone-700 shadow-lg overflow-hidden py-1 z-50"
+  >
+    {items.map(({ href, label }) => (
+      <a
+        href={href}
+        class={`block px-3 py-1.5 text-sm transition-colors ${
+          currentPath === href
+            ? 'text-amber-400 bg-stone-900/60'
+            : 'text-stone-300 hover:text-white hover:bg-stone-700'
+        }`}
+      >
+        {label}
+      </a>
+    ))}
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-map-dropdown]').forEach((root) => {
+    const id = root.getAttribute('data-map-dropdown');
+    const trigger = root.querySelector<HTMLButtonElement>(`[data-map-dropdown-trigger="${id}"]`);
+    const panel = root.querySelector<HTMLElement>(`[data-map-dropdown-panel="${id}"]`);
+    const caret = root.querySelector<HTMLElement>(`[data-map-dropdown-caret="${id}"]`);
+    if (!trigger || !panel) return;
+
+    const close = () => {
+      panel.classList.add('hidden');
+      trigger.setAttribute('aria-expanded', 'false');
+      caret?.classList.remove('rotate-180');
+    };
+    const open = () => {
+      panel.classList.remove('hidden');
+      trigger.setAttribute('aria-expanded', 'true');
+      caret?.classList.add('rotate-180');
+    };
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = trigger.getAttribute('aria-expanded') === 'true';
+      document.querySelectorAll('[data-map-dropdown-panel]').forEach((p) => p.classList.add('hidden'));
+      document.querySelectorAll('[data-map-dropdown-trigger]').forEach((t) => t.setAttribute('aria-expanded', 'false'));
+      document.querySelectorAll('[data-map-dropdown-caret]').forEach((c) => c.classList.remove('rotate-180'));
+      if (isOpen) close(); else open();
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!root.contains(e.target as Node)) close();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') close();
+    });
+  });
+</script>
