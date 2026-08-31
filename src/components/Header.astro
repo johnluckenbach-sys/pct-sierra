@@ -1,6 +1,7 @@
 ---
+import MapDropdown from './MapDropdown.astro';
+
 const navLinks = [
-  { href: '/', label: 'Map' },
   { href: '/trips', label: 'All Trips' },
   { href: '/about', label: 'About' },
 ];
@@ -21,6 +22,7 @@ const currentPath = Astro.url.pathname;
     </a>
 
     <nav class="flex items-center gap-1">
+      <MapDropdown id="header-map" />
       {navLinks.map(({ href, label }) => (
         <a
           href={href}

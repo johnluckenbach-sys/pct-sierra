@@ -1,0 +1,165 @@
+---
+import { getCollection } from 'astro:content';
+import Layout from '../layouts/Layout.astro';
+import Header from './Header.astro';
+import Map from './Map.astro';
+import MapDropdown from './MapDropdown.astro';
+import { parseTripSheet, mergeSheetData } from '../lib/trip-sheet';
+import tripsCSV from '../data/trips.csv?raw';
+
+interface Props {
+  trail?: 'PCT' | 'JMT' | 'other';
+  heading: string;
+  subheading: string;
+}
+
+const { trail, heading, subheading } = Astro.props;
+
+const sheet = parseTripSheet(tripsCSV);
+
+const allTrips = await getCollection('trips');
+const merged = allTrips
+  .map(t => ({ ...t, data: mergeSheetData(t.data, sheet[t.id]) }))
+  .sort((a, b) => a.data.year - b.data.year);
+
+const trips = trail ? merged.filter(t => t.data.trail === trail) : merged;
+
+// Greedy graph coloring: assign colors south→north so no two touching routes share a color.
+// Routes are "adjacent" if their PCT mile ranges are within 5 miles of each other.
+// Trips without mile data (JMT/Other) have no shared mileage axis, so they just round-robin the palette.
+const MAP_PALETTE = ['#e05525', '#1a7fa5', '#c4902a'];
+const withMiles = trips.filter(t => t.data.pctMileStart != null && t.data.pctMileEnd != null);
+const withoutMiles = trips.filter(t => t.data.pctMileStart == null || t.data.pctMileEnd == null);
+
+const geoSorted = [...withMiles].sort((a, b) => (a.data.pctMileStart ?? Infinity) - (b.data.pctMileStart ?? Infinity));
+const paletteColor: Record<string, string> = {};
+for (const trip of geoSorted) {
+  const s = trip.data.pctMileStart ?? 0;
+  const e = trip.data.pctMileEnd ?? 0;
+  const usedColors = new Set<string>();
+  for (const [otherId, color] of Object.entries(paletteColor)) {
+    const other = geoSorted.find(t => t.id === otherId)!;
+    const os = other.data.pctMileStart ?? 0;
+    const oe = other.data.pctMileEnd ?? 0;
+    if (s > 0 && e > 0 && os > 0 && oe > 0 && s <= oe + 5 && os <= e + 5) {
+      usedColors.add(color);
+    }
+  }
+  paletteColor[trip.id] = MAP_PALETTE.find(c => !usedColors.has(c)) ?? MAP_PALETTE[0];
+}
+withoutMiles.forEach((trip, i) => {
+  paletteColor[trip.id] = MAP_PALETTE[i % MAP_PALETTE.length];
+});
+
+const mapTrips = trips.map(t => ({
+  slug: t.id,
+  title: t.data.title,
+  year: t.data.year,
+  days: t.data.days,
+  miles: t.data.miles,
+  startPoint: t.data.startPoint,
+  endPoint: t.data.endPoint,
+  description: t.data.description,
+  coordinates: t.data.coordinates,
+  color: paletteColor[t.id] ?? t.data.color,
+  routeFile: t.data.routeFile,
+}));
+
+const totalMiles = trips.reduce((sum, t) => sum + t.data.miles, 0);
+const totalDays  = trips.reduce((sum, t) => sum + t.data.days, 0);
+const totalGain  = trips.reduce((sum, t) => sum + (t.data.elevationGain ?? 0), 0);
+
+const trailLabel: Record<string, string> = { PCT: 'the PCT', JMT: 'the JMT', other: 'these trails' };
+const emptyMessage = trail
+  ? `No trips logged on ${trailLabel[trail]} yet — check back soon.`
+  : 'No trips logged yet — check back soon.';
+---
+
+<Layout>
+  <Header />
+
+  <!-- Hero: full-viewport map, overlaid by fixed header and bottom nav -->
+  <section class="relative h-screen">
+    <Map trips={mapTrips} class="absolute inset-0" />
+
+    <!-- Overlay title -->
+    <div class="absolute bottom-0 left-0 right-0 pointer-events-none">
+      <div class="bg-gradient-to-t from-stone-900/80 via-stone-900/40 to-transparent pt-24 pb-20 px-6">
+        <div class="max-w-6xl mx-auto">
+          <h1 class="text-white text-4xl sm:text-5xl font-bold leading-tight mb-3" style="font-family: 'Lora', serif;">
+            {heading}
+          </h1>
+          <p class="text-stone-300 text-base sm:text-lg max-w-xl mb-6">
+            {subheading}
+          </p>
+
+          {trips.length > 0 ? (
+            <>
+              <!-- Interactive hint -->
+              <div class="flex items-center gap-2 mb-5">
+                <span class="map-hint-dot inline-block w-2 h-2 rounded-full bg-amber-400"></span>
+                <p class="text-amber-300/90 text-sm font-medium tracking-wide">
+                  Hover a route to preview · Click to open trip journal
+                </p>
+              </div>
+
+              <!-- Stats bar -->
+              <div class="flex flex-wrap items-center gap-6 pointer-events-auto">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-white text-xl font-semibold">{totalMiles.toFixed(1)}</span>
+                  <span class="text-stone-400 text-xs uppercase tracking-wider">Miles</span>
+                </div>
+                <div class="w-px h-4 bg-stone-600"></div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-white text-xl font-semibold">{trips.length}</span>
+                  <span class="text-stone-400 text-xs uppercase tracking-wider">Trips</span>
+                </div>
+                <div class="w-px h-4 bg-stone-600"></div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-white text-xl font-semibold">{totalDays}</span>
+                  <span class="text-stone-400 text-xs uppercase tracking-wider">Days on Trail</span>
+                </div>
+                {totalGain > 0 && (
+                  <>
+                    <div class="w-px h-4 bg-stone-600"></div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-white text-xl font-semibold">{totalGain.toLocaleString()}</span>
+                      <span class="text-stone-400 text-xs uppercase tracking-wider">Ft Gained</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          ) : (
+            <p class="text-stone-400 text-sm pointer-events-auto">{emptyMessage}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Bottom navigation bar -->
+  <nav class="fixed bottom-0 left-0 right-0 z-50 bg-stone-900/90 backdrop-blur-sm border-t border-stone-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-center h-14 gap-1">
+      <MapDropdown id="bottomnav-map" />
+      <a href="/trips" class="px-3 py-1.5 rounded text-sm transition-colors text-stone-300 hover:text-white hover:bg-stone-800">All Trips</a>
+      <a href="/about" class="px-3 py-1.5 rounded text-sm transition-colors text-stone-300 hover:text-white hover:bg-stone-800">About</a>
+    </div>
+  </nav>
+</Layout>
+
+<style is:global>
+  html, body {
+    overflow: hidden;
+    height: 100%;
+  }
+  /* Push scale control above the fixed bottom nav on homepage */
+  .mapboxgl-ctrl-bottom-left  { margin-bottom: 64px !important; }
+  .mapboxgl-ctrl-bottom-right { margin-bottom: 64px !important; }
+
+  @keyframes map-hint-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(1.5); }
+  }
+  .map-hint-dot { animation: map-hint-pulse 2s ease-in-out infinite; }
+</style>
